@@ -16,7 +16,13 @@ body {
   flex-direction: column;
   align-items: center;
   min-height: 100vh;
-  overflow: hidden; /* avoid scrollbars on phones */
+  overflow: hidden; /* avoid scroll on phones */
+}
+
+/* Ensure all buttons/links use Handjet & bold */
+button, a {
+  font-family: "Handjet", sans-serif;
+  font-weight: 700;
 }
 
 /* Top HUD */
@@ -28,7 +34,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.7rem;
+  font-size: 1rem;
 }
 
 #scoreBox {
@@ -39,22 +45,18 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.7rem;
+  font-size: 1rem;
 }
 
 #changePlayerBtn {
   background: #ff6b8b;
   border: none;
   color: #150818;
-  padding: 3px 8px;
+  padding: 5px 10px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.65rem;
+  font-size: 0.9rem;
   font-weight: 700;
-}
-
-#changePlayerBtn:hover {
-  filter: brightness(1.1);
 }
 
 /* Controls bar */
@@ -62,44 +64,45 @@ body {
 #controlsBar {
   width: 100%;
   max-width: 520px;
-  padding: 0 10px 4px;
+  padding: 2px 10px 4px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+#startBtn,
+#scoreboardLink {
+  padding: 7px 16px;
+  border-radius: 10px;
+  font-size: 1rem;
+  min-height: 40px;
+  min-width: 110px;
 }
 
 #startBtn {
   background: #ff6b8b;
   border: none;
   color: #150818;
-  padding: 5px 10px;
-  border-radius: 8px;
   cursor: pointer;
-  font-weight: 700;
-  font-size: 0.7rem;
 }
 
-#startBtn:hover {
-  filter: brightness(1.1);
-}
-
-#leaderboardLink {
+#scoreboardLink {
   text-decoration: none;
   background: #3e8bff;
   color: #050814;
-  padding: 5px 10px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 0.7rem;
+  text-align: center;
 }
 
-#leaderboardLink:hover {
-  filter: brightness(1.1);
+/* Hover (desktop only really) */
+#startBtn:hover,
+#scoreboardLink:hover,
+#changePlayerBtn:hover {
+  filter: brightness(1.08);
 }
 
 #msg {
-  min-height: 18px;
-  font-size: 0.65rem;
+  min-height: 20px;
+  font-size: 0.9rem;
   text-align: center;
   width: 100%;
   max-width: 520px;
@@ -119,10 +122,10 @@ body {
 }
 
 .help {
-  font-size: 0.6rem;
+  font-size: 0.9rem;
   color: #a8b0ff;
   text-align: center;
-  margin: 4px 10px 8px;
+  margin: 6px 10px 10px;
 }
 
 /* Player selection overlay */
@@ -134,11 +137,13 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 20;
+  z-index: 50;
+  pointer-events: auto;
 }
 
 .hidden {
   display: none;
+  pointer-events: none;
 }
 
 #playerPanel {
@@ -153,16 +158,16 @@ body {
 #playerPanel h2 {
   margin: 0 0 6px;
   text-align: center;
-  font-size: 1rem;
+  font-size: 1.3rem;
   color: #ffd36b;
 }
 
 .section {
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .sectionTitle {
-  font-size: 0.7rem;
+  font-size: 1rem;
   font-weight: 600;
   margin-bottom: 4px;
   color: #c5ccff;
@@ -180,10 +185,10 @@ body {
   background: #2a2c4a;
   border: none;
   color: #f4f4ff;
-  padding: 5px 4px;
+  padding: 6px 4px;
   border-radius: 10px;
   cursor: pointer;
-  font-size: 0.7rem;
+  font-size: 0.95rem;
 }
 
 .teamBtn.selected {
@@ -196,9 +201,9 @@ body {
   background: #0a0b1c;
   border-radius: 10px;
   padding: 6px;
-  max-height: 140px;
+  max-height: 160px;
   overflow-y: auto;
-  font-size: 0.7rem;
+  font-size: 0.95rem;
 }
 
 #numberList button {
@@ -226,7 +231,7 @@ body {
 }
 
 #selectedPreview {
-  font-size: 0.75rem;
+  font-size: 1rem;
   margin-bottom: 6px;
 }
 
@@ -240,16 +245,11 @@ body {
   background: #ff6b8b;
   border: none;
   color: #150818;
-  padding: 5px 10px;
+  padding: 6px 12px;
   border-radius: 10px;
   cursor: pointer;
-  font-size: 0.7rem;
+  font-size: 0.95rem;
   font-weight: 600;
-}
-
-#confirmPlayerBtn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 /* Mobile tweaks */
@@ -257,22 +257,21 @@ body {
 @media (max-width: 600px) {
   #topBar {
     padding: 2px 8px;
-    font-size: 0.6rem;
+    font-size: 0.9rem;
   }
   #playerBox {
-    font-size: 0.6rem;
+    font-size: 0.9rem;
   }
   #controlsBar {
     padding: 0 8px 2px;
   }
   #startBtn,
-  #leaderboardLink,
+  #scoreboardLink,
   #changePlayerBtn {
-    font-size: 0.6rem;
-    padding: 4px 8px;
+    font-size: 0.9rem;
+    padding: 6px 10px;
   }
   .help {
-    font-size: 0.55rem;
-    margin-bottom: 6px;
+    font-size: 0.85rem;
   }
 }
