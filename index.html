@@ -1,43 +1,73 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1.0" />
-<title>Kokky's Onsen Dash</title>
-<link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <title>Kokky's Onsen Dash</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<div id="hud">
-  <div id="scoreBox">
-    Score: <span id="score">0</span>
-    &nbsp;|&nbsp;
-    Best: <span id="best">0</span>
+  <div id="topBar">
+    <div id="scoreBox">
+      Score: <span id="score">0</span>
+      &nbsp;|&nbsp;
+      Best: <span id="best">0</span>
+    </div>
+    <div id="playerBox">
+      Player: <span id="playerIdLabel">Not set</span>
+      <button id="changePlayerBtn">Change Player</button>
+    </div>
   </div>
-  <button id="startBtn">Play</button>
-</div>
 
-<div id="msg"></div>
-<canvas id="game" width="480" height="640"></canvas>
-
-<!-- Name entry popup -->
-<div id="overlay" class="hidden"></div>
-<div id="namePopup" class="hidden">
-  <h2>New High Score!</h2>
-  <p>Enter your name (W/R/G/B + Name):</p>
-  <input id="nameInput" type="text" maxlength="20" placeholder="R Daichi" />
-  <p id="nameError"></p>
-  <div class="popupButtons">
-    <button id="submitNameBtn">Submit</button>
-    <button id="cancelNameBtn">Cancel</button>
+  <div id="controlsBar">
+    <button id="startBtn">Play</button>
+    <a id="leaderboardLink" href="leaderboard.html" target="_blank">Leaderboard</a>
   </div>
-</div>
 
-<p class="help">
-Tap / Click / Space to hop through the onsen steam.<br>
-Local test version with leaderboard popup.
-</p>
+  <div id="msg"></div>
 
-<script src="game.js"></script>
+  <canvas id="game" width="480" height="640"></canvas>
+
+  <p class="help">
+    Tap / Click / Space to hop through the onsen steam.<br />
+    Please select your team and number before playing.
+  </p>
+
+  <!-- Player selection overlay -->
+  <div id="playerOverlay" class="overlay hidden">
+    <div id="playerPanel">
+      <h2>Select Player</h2>
+
+      <div class="section">
+        <div class="sectionTitle">1. Choose Team</div>
+        <div id="teamButtons">
+          <button class="teamBtn" data-team="W">White</button>
+          <button class="teamBtn" data-team="R">Red</button>
+          <button class="teamBtn" data-team="G">Green</button>
+          <button class="teamBtn" data-team="B">Blue</button>
+          <button class="teamBtn" data-team="Guest">Guest</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="sectionTitle">2. Choose Number</div>
+        <div id="numberList">
+          <p class="hint">Select a team first.</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="sectionTitle">3. Confirm</div>
+        <div id="selectedPreview">Player: -</div>
+        <div class="panelButtons">
+          <button id="confirmPlayerBtn" disabled>Use This Player</button>
+          <button id="cancelPlayerBtn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
 </body>
 </html>
