@@ -1,4 +1,4 @@
-// Kokky's Onsen Dash – Flappy-style with ranks, carrots, Kokky sprite, team IDs
+// Kokky's Onsen Dash – Flappy-style with ranks, carrot waves, Kokky sprite, team IDs
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -60,7 +60,7 @@ const gapSize = 180;
 let spawnTimer = 0;
 
 const baseSpeed = 3;
-const boostedSpeed = 3.8;
+const boostedSpeed = 3.8; // after 60 obstacles
 
 // Rank popup
 let nextRankIndex = 0;
@@ -399,10 +399,13 @@ function updateGame(){
     return;
   }
 
-  spawnTimer++;
-  if(spawnTimer > 85){
-    spawnTimer = 0;
-    addObstacle();
+  // only spawn obstacles if no carrot wave on screen
+  if(carrots.length === 0){
+    spawnTimer++;
+    if(spawnTimer > 85){
+      spawnTimer = 0;
+      addObstacle();
+    }
   }
 
   const speed = obstaclesPassed >= 60 ? boostedSpeed : baseSpeed;
@@ -418,7 +421,8 @@ function updateGame(){
 
       checkRankUp();
 
-      if(obstaclesPassed % 5 === 0 && obstaclesPassed !== lastCarrotWaveObstacleCount){
+      // carrot wave every 10 obstacles
+      if(obstaclesPassed % 10 === 0 && obstaclesPassed !== lastCarrotWaveObstacleCount){
         lastCarrotWaveObstacleCount = obstaclesPassed;
         spawnCarrotWave();
       }
@@ -514,12 +518,12 @@ function draw(){
     ctx.fillRect(bx,by,boxW,boxH);
 
     ctx.fillStyle = "#ffe79c";
-    ctx.font = "12px 'Press Start 2P'";
+    ctx.font = "12px 'Handjet'";
     ctx.textAlign = "center";
-    ctx.fillText("Rank Up!", W/2, by+22);
+    ctx.fillText("Rank Up!", W/2, by+24);
 
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(rankPopupTitle, W/2, by+42);
+    ctx.fillText(rankPopupTitle, W/2, by+44);
 
     ctx.globalAlpha = 1;
     rankPopupTimer--;
