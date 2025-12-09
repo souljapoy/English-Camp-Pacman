@@ -1,5 +1,5 @@
 // Kokky's Onsen Dash – Local Leaderboard Version
-// Placeholder Kokky + working score + popup
+// Placeholder Kokky + working score + popup + popup input fix
 
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
@@ -16,6 +16,9 @@ const nameInput=document.getElementById("nameInput");
 const nameError=document.getElementById("nameError");
 const submitNameBtn=document.getElementById("submitNameBtn");
 const cancelNameBtn=document.getElementById("cancelNameBtn");
+
+// New: Track popup state to disable controls
+let popupIsOpen = false;
 
 // Game values
 let W=canvas.width;
@@ -35,13 +38,18 @@ let spawnTimer=0;
 // Controls
 window.addEventListener("keydown",e=>{
   if(e.code==="Space"){
-    hop();
+    if(!popupIsOpen) {
+      hop();
+    }
     e.preventDefault();
   }
 });
-canvas.addEventListener("pointerdown",()=>hop());
+canvas.addEventListener("pointerdown",()=>{
+  if(!popupIsOpen) hop();
+});
 
 function hop(){
+  if(popupIsOpen) return;
   if(!running){
     startGame();
   }
@@ -111,7 +119,9 @@ function upsert(name,score){
   if(list.length>20) list=list.slice(0,20);
   saveBoard(list);
 }
+
 function showPopup(){
+  popupIsOpen = true; // NEW FIX
   overlayEl.classList.remove("hidden");
   popupEl.classList.remove("hidden");
   nameInput.value="";
@@ -119,6 +129,7 @@ function showPopup(){
   nameInput.focus();
 
   function close(){
+    popupIsOpen = false; // NEW FIX
     overlayEl.classList.add("hidden");
     popupEl.classList.add("hidden");
     submitNameBtn.removeEventListener("click",submit);
@@ -127,12 +138,12 @@ function showPopup(){
   function submit(){
     const raw=nameInput.value.trim();
     if(!raw){
-      nameError.textContent="Required: W/R/G/B Name";
+      nameError.textContent="Required: W/R/G/B + Name";
       return;
     }
-    const parts=raw.split(/\\s+/);
+    const parts=raw.split(/\s+/);
     if(parts.length<2){
-      nameError.textContent="Format: W/R/G/B Name";
+      nameError.textContent="Format: W Name";
       return;
     }
     const first=parts[0].toUpperCase();
