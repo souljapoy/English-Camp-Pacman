@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Kokky's Onsen Dash – Leaderboard</title>
+  <title>Kokky's Onsen Dash – Scoreboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,12 +32,12 @@
     }
     h1{
       margin:0 0 6px;
-      font-size:1rem;
+      font-size:1.2rem;
       color:#ffd36b;
       text-align:center;
     }
     p.note{
-      font-size:0.65rem;
+      font-size:0.85rem;
       color:#a8b0ff;
       text-align:center;
       margin:4px 0 10px;
@@ -48,7 +48,7 @@
       background:#0b0c1a;
       border-radius:10px;
       overflow:hidden;
-      font-size:0.7rem;
+      font-size:0.85rem;
     }
     th,td{
       padding:6px 8px;
@@ -77,7 +77,7 @@
       border-radius:10px;
       font-weight:700;
       text-decoration:none;
-      font-size:0.7rem;
+      font-size:0.85rem;
     }
     .backBtn:hover{
       filter:brightness(1.05);
@@ -88,16 +88,16 @@
         padding:8px;
       }
       h1{
-        font-size:0.9rem;
+        font-size:1.05rem;
       }
       p.note{
-        font-size:0.6rem;
+        font-size:0.8rem;
       }
       table{
-        font-size:0.65rem;
+        font-size:0.8rem;
       }
       .backBtn{
-        font-size:0.65rem;
+        font-size:0.8rem;
         padding:6px 10px;
       }
     }
@@ -105,9 +105,9 @@
 </head>
 <body>
   <div id="wrap">
-    <h1>Kokky's Onsen Dash – Top Players</h1>
+    <h1>Kokky's Onsen Dash – Scoreboard</h1>
     <p class="note">
-      Local leaderboard on <strong>this device only</strong>.<br/>
+      Local scoreboard on <strong>this device only</strong>.<br/>
       Your scores are also saved to an overall leaderboard online.<br/><br/>
       Player ID = TeamColor-Number (ex: W-18, R-A)
     </p>
@@ -117,6 +117,7 @@
           <th>#</th>
           <th>Player</th>
           <th class="score">Score</th>
+          <th>Best Rank</th>
         </tr>
       </thead>
       <tbody id="lbBody"></tbody>
@@ -128,6 +129,16 @@
   </div>
 
   <script>
+    const RANKS = [
+      { threshold: 25,  title: "Steam Hopper" },
+      { threshold: 50,  title: "Onsen Ace" },
+      { threshold: 75,  title: "Steam Master" },
+      { threshold: 100, title: "Onsen Overlord" },
+      { threshold: 250, title: "King of the Onsen" },
+      { threshold: 500, title: "Onsen Legend" },
+      { threshold: 1000, title: "Onsen God" }
+    ];
+
     function loadBoard(){
       try{
         const raw = localStorage.getItem("onsen_lb");
@@ -137,6 +148,11 @@
       }catch(e){
         return [];
       }
+    }
+
+    function rankLabelFromIndex(idx){
+      if(typeof idx !== "number" || idx < 0 || idx >= RANKS.length) return "-";
+      return RANKS[idx].title;
     }
 
     function render(){
@@ -152,15 +168,18 @@
         const rankTd = document.createElement("td");
         const playerTd = document.createElement("td");
         const scoreTd = document.createElement("td");
+        const bestRankTd = document.createElement("td");
 
         rankTd.textContent = idx+1;
         playerTd.textContent = (e.id === "0" ? "Guest" : (e.id || "-"));
         scoreTd.textContent = e.score;
         scoreTd.className = "score";
+        bestRankTd.textContent = rankLabelFromIndex(e.bestRankIndex);
 
         tr.appendChild(rankTd);
         tr.appendChild(playerTd);
         tr.appendChild(scoreTd);
+        tr.appendChild(bestRankTd);
         tbody.appendChild(tr);
       });
     }
