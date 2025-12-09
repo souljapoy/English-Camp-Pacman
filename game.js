@@ -1,201 +1,401 @@
-// =======================
-// Kokky’s Onsen Dash 🍶🐰
-// Updated: Player sprite version
-// =======================
+// Kokky's Onsen Dash – Team + Number Version (with Kokky image instead of circle)
 
-// ---- Canvas Setup ----
-const canvas = document.getElementById("gameCanvas");
+const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-canvas.width = 360;
-canvas.height = 640;
 
-// ---- Game Settings ----
-let gravity = 0.5;
-let jumpPower = -8;
-let speed = 2;
-let score = 0;
-let bestScore = Number(localStorage.getItem("bestScore")) || 0;
-let gameOver = false;
+const scoreEl = document.getElementById("score");
+const bestEl  = document.getElementById("best");
+const startBtn = document.getElementById("startBtn");
+const msgEl   = document.getElementById("msg");
 
-let obstacleGap = 150;
-let obstacleWidth = 50;
-let obstacleFreq = 120;
-let frameCount = 0;
+const playerOverlay = document.getElementById("playerOverlay");
+const playerIdLabel = document.getElementById("playerIdLabel");
+const changePlayerBtn = document.getElementById("changePlayerBtn");
 
-// ---- Carrot Waves ----
-let carrotWaveCounter = 0;
-let carrots = [];
-function spawnCarrotWave() {
-    carrotWaveCounter++;
-    let hasGolden = Math.random() < 0.33; // 1 in 3 waves
-    for (let i = 0; i < 5; i++) {
-        carrots.push({
-            x: canvas.width + i * 30,
-            y: Math.random() * (canvas.height - 200) + 50,
-            w: 20,
-            h: 20,
-            golden: hasGolden && i === Math.floor(Math.random() * 5)
-        });
-    }
-}
+const teamButtonsContainer = document.getElementById("teamButtons");
+const numberList = document.getElementById("numberList");
+const selectedPreview = document.getElementById("selectedPreview");
+const confirmPlayerBtn = document.getElementById("confirmPlayerBtn");
+const cancelPlayerBtn = document.getElementById("cancelPlayerBtn");
 
-// ---- Player & Sprite ----
-let player = {
-    x: 80,
-    y: canvas.height / 2,
-    vy: 0,
-    width: 50,
-    height: 50
+const W = canvas.width;
+const H = canvas.height;
+
+// Team config
+const TEAM_CONFIG = {
+  W: { // White
+    label: "White",
+    numbers: [5,8,9,18,19,22,28,29,30,34],
+    alts: ["A","B"]
+  },
+  R: { // Red
+    label: "Red",
+    numbers: [1,4,6,7,11,13,20,21,27,31,40],
+    alts: ["A","B"]
+  },
+  B: { // Blue
+    label: "Blue",
+    numbers: [2,3,15,16,17,25,32,33,38,41],
+    alts: ["A","B"]
+  },
+  G: { // Green
+    label: "Green",
+    numbers: [10,12,14,23,24,26,35,36,37,39],
+    alts: ["A","B"]
+  },
+  Guest: {
+    label: "Guest",
+    numbers: [0],
+    alts: []
+  }
 };
 
-// Load Kokky Sprite (your uploaded file)
+// Game state
+let running = false;
+let obstacles = [];
+let score = 0;
+
+// Player state
+let currentPlayerId = localStorage.getItem("onsen_player_id") || null;
+
+updatePlayerLabel();
+updateBestFromLeaderboard();
+
+// Physics
+let player = { x: 120, y: H/2, vy: 0, r: 24 };
+const gravity = 0.45;
+const hopPower = -8.8;
+const gapSize = 180;
+let spawnTimer = 0;
+
+// Kokky image
 const kokkyImg = new Image();
 kokkyImg.src = "kokky.png";
+let kokkyLoaded = false;
+kokkyImg.onload = () => { kokkyLoaded = true; };
 
-// ---- Obstacles ----
-let obstacles = [];
-function spawnObstacle() {
-    let topHeight = Math.random() * (canvas.height - obstacleGap - 100) + 50;
-    obstacles.push({
-        x: canvas.width,
-        top: topHeight,
-        bottom: topHeight + obstacleGap
-    });
-}
-
-// ---- Controls ----
-document.addEventListener("keydown", (e) => {
-    if (e.code === "Space") {
-        if (gameOver) resetGame();
-        else playerJump();
+// Controls
+window.addEventListener("keydown", e=>{
+  if(e.code === "Space"){
+    if(!running){
+      startGame();
+    }else{
+      hop();
     }
-});
-canvas.addEventListener("mousedown", () => {
-    if (gameOver) resetGame();
-    else playerJump();
+    e.preventDefault();
+  }
 });
 
-// ---- Player Actions ----
-function playerJump() {
-    player.vy = jumpPower;
+canvas.addEventListener("pointerdown", () => {
+  if(!running){
+    startGame();
+  }else{
+    hop();
+  }
+});
+
+startBtn.addEventListener("click", () => {
+  startGame();
+});
+
+changePlayerBtn.addEventListener("click", () => {
+  openPlayerOverlay();
+});
+
+cancelPlayerBtn.addEventListener("click", () => {
+  closePlayerOverlay(false);
+});
+
+// Player overlay logic
+let selectedTeamKey = null;
+let selectedNumberCode = null;
+
+function openPlayerOverlay() {
+  selectedTeamKey = null;
+  selectedNumberCode = null;
+  confirmPlayerBtn.disabled = true;
+  selectedPreview.textContent = "Player: -";
+  numberList.innerHTML = '<p class="hint">Select a team first.</p>';
+  Array.from(document.querySelectorAll(".teamBtn")).forEach(btn=>{
+    btn.classList.remove("selected");
+  });
+  playerOverlay.classList.remove("hidden");
 }
 
-function resetGame() {
-    score = 0;
-    speed = 2;
-    obstacles = [];
-    carrots = [];
-    frameCount = 0;
-    player.y = canvas.height / 2;
-    player.vy = 0;
-    gameOver = false;
+function closePlayerOverlay(committed) {
+  playerOverlay.classList.add("hidden");
+  if(!committed && !currentPlayerId){
+    setTimeout(openPlayerOverlay, 10);
+  }
 }
 
-// ---- Collision Check ----
-function checkCollision(obs) {
-    if (
-        player.x + player.width / 2 > obs.x &&
-        player.x - player.width / 2 < obs.x + obstacleWidth &&
-        (player.y - player.height / 2 < obs.top ||
-         player.y + player.height / 2 > obs.bottom)
-    ) {
-        return true;
+teamButtonsContainer.addEventListener("click", e=>{
+  const btn = e.target.closest(".teamBtn");
+  if(!btn) return;
+  const teamKey = btn.dataset.team;
+  selectedTeamKey = teamKey;
+  selectedNumberCode = null;
+  confirmPlayerBtn.disabled = true;
+  selectedPreview.textContent = "Player: -";
+
+  Array.from(teamButtonsContainer.querySelectorAll(".teamBtn")).forEach(b=>{
+    b.classList.toggle("selected", b === btn);
+  });
+
+  buildNumberList(teamKey);
+});
+
+function buildNumberList(teamKey) {
+  const cfg = TEAM_CONFIG[teamKey];
+  numberList.innerHTML = "";
+  if(!cfg){
+    numberList.innerHTML = '<p class="hint">Unknown team.</p>';
+    return;
+  }
+
+  if(teamKey === "Guest") {
+    const btn = document.createElement("button");
+    btn.textContent = "0 – Guest";
+    btn.dataset.code = "0";
+    btn.addEventListener("click", ()=>selectNumberCode("0", btn));
+    numberList.appendChild(btn);
+    return;
+  }
+
+  const allCodes = [...cfg.numbers.map(n=>String(n)), ...cfg.alts];
+
+  allCodes.forEach(code => {
+    const btn = document.createElement("button");
+    if(code === "A" || code === "B"){
+      btn.textContent = `${code} (ALT)`;
+    }else{
+      btn.textContent = code;
     }
-    return false;
+    btn.dataset.code = code;
+    btn.addEventListener("click", ()=>selectNumberCode(code, btn));
+    numberList.appendChild(btn);
+  });
 }
 
-// ---- Drawing Functions ----
-function drawPlayer() {
-    ctx.drawImage(kokkyImg, player.x - 25, player.y - 25, 50, 50);
+function selectNumberCode(code, btn) {
+  selectedNumberCode = code;
+  Array.from(numberList.querySelectorAll("button")).forEach(b=>{
+    b.classList.remove("selected");
+  });
+  btn.classList.add("selected");
+  updatePreviewAndButton();
 }
 
-function drawObstacles() {
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    obstacles.forEach((obs) => {
-        ctx.fillRect(obs.x, 0, obstacleWidth, obs.top);
-        ctx.fillRect(obs.x, obs.bottom, obstacleWidth, canvas.height - obs.bottom);
-    });
+function updatePreviewAndButton() {
+  if(!selectedTeamKey || !selectedNumberCode){
+    confirmPlayerBtn.disabled = true;
+    selectedPreview.textContent = "Player: -";
+    return;
+  }
+
+  let idStr;
+  if(selectedTeamKey === "Guest"){
+    idStr = "0";
+  }else{
+    idStr = `${selectedTeamKey}-${selectedNumberCode}`;
+  }
+  selectedPreview.textContent = `Player: ${idStr}`;
+  confirmPlayerBtn.disabled = false;
 }
 
-function drawCarrots() {
-    carrots.forEach(c => {
-        ctx.fillStyle = c.golden ? "yellow" : "orange";
-        ctx.fillRect(c.x, c.y, c.w, c.h);
-    });
+confirmPlayerBtn.addEventListener("click", () => {
+  if(!selectedTeamKey || !selectedNumberCode){
+    return;
+  }
+  let idStr;
+  if(selectedTeamKey === "Guest"){
+    idStr = "0";
+  }else{
+    idStr = `${selectedTeamKey}-${selectedNumberCode}`;
+  }
+  currentPlayerId = idStr;
+  localStorage.setItem("onsen_player_id", currentPlayerId);
+  updatePlayerLabel();
+  updateBestFromLeaderboard();
+  closePlayerOverlay(true);
+});
+
+// Helpers
+function updatePlayerLabel() {
+  if(!currentPlayerId){
+    playerIdLabel.textContent = "Not set";
+  }else{
+    playerIdLabel.textContent = currentPlayerId;
+  }
 }
 
-function drawScoreboard() {
-    ctx.fillStyle = "white";
-    ctx.font = "24px PixFont";
-    ctx.fillText(`Score: ${score}`, 20, 40);
-    ctx.fillText(`Best: ${bestScore}`, 240, 40);
+function loadBoard(){
+  try{
+    const raw = localStorage.getItem("onsen_lb");
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){
+    return [];
+  }
 }
 
-// ---- Update Loop ----
-function update() {
-    if (!gameOver) {
-        frameCount++;
+function saveBoard(list){
+  localStorage.setItem("onsen_lb", JSON.stringify(list));
+}
 
-        // Difficulty scaling after 20 points
-        if (score >= 20) {
-            speed = 2 + (score * 0.02);
-        }
+function updateBestFromLeaderboard(){
+  if(!currentPlayerId){
+    bestEl.textContent = "0";
+    return;
+  }
+  const list = loadBoard();
+  const entry = list.find(e=>e.id === currentPlayerId);
+  const best = entry ? entry.score : 0;
+  bestEl.textContent = best;
+}
 
-        player.vy += gravity;
-        player.y += player.vy;
+// Game logic
+function startGame() {
+  if(!currentPlayerId){
+    openPlayerOverlay();
+    return;
+  }
+  running = true;
+  score = 0;
+  scoreEl.textContent = score;
+  msgEl.textContent = "";
+  obstacles = [];
+  player.y = H/2;
+  player.vy = 0;
+  spawnTimer = 0;
+  loop();
+}
 
-        if (frameCount % obstacleFreq === 0) spawnObstacle();
-        if (frameCount % 300 === 0) spawnCarrotWave();
+function hop() {
+  if(!running) return;
+  player.vy = hopPower;
+}
 
-        // Move & check obstacles
-        obstacles.forEach((obs, i) => {
-            obs.x -= speed;
-            if (obs.x + obstacleWidth < 0) {
-                obstacles.splice(i, 1);
-                score++;
-            }
-            if (checkCollision(obs)) triggerGameOver();
-        });
+function addObstacle(){
+  const top = 40 + Math.random()*(H - 260);
+  obstacles.push({
+    x: W + 40,
+    top,
+    gap: gapSize,
+    passed: false
+  });
+}
 
-        // Carrot movement & collection
-        carrots.forEach((c, i) => {
-            c.x -= speed;
-            if (c.x + c.w < 0) carrots.splice(i, 1);
-
-            if (
-                player.x < c.x + c.w &&
-                player.x + player.width > c.x &&
-                player.y < c.y + c.h &&
-                player.y + player.height > c.y
-            ) {
-                score += c.golden ? 5 : 2;
-                carrots.splice(i, 1);
-            }
-        });
-
-        // Ground and ceiling bounds
-        if (player.y < 0 || player.y > canvas.height) {
-            triggerGameOver();
-        }
+function collide(o){
+  if(player.x + player.r > o.x && player.x - player.r < o.x + 40){
+    if(player.y - player.r < o.top || player.y + player.r > o.top + o.gap){
+      return true;
     }
-
-    // Draw
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawObstacles();
-    drawCarrots();
-    drawPlayer();
-    drawScoreboard();
-
-    requestAnimationFrame(update);
+  }
+  return false;
 }
 
-function triggerGameOver() {
-    gameOver = true;
-    if (score > bestScore) {
-        bestScore = score;
-        localStorage.setItem("bestScore", bestScore);
+function endGame(){
+  running = false;
+
+  if(!currentPlayerId || score <= 0){
+    msgEl.textContent = `Score: ${score}`;
+    return;
+  }
+
+  let list = loadBoard();
+  let entry = list.find(e=>e.id === currentPlayerId);
+  const prev = entry ? entry.score : 0;
+
+  if(score > prev){
+    if(!entry){
+      entry = {id: currentPlayerId, score, ts: Date.now()};
+      list.push(entry);
+    }else{
+      entry.score = score;
+      entry.ts = Date.now();
     }
+    list.sort((a,b)=>b.score - a.score || a.ts - b.ts);
+    if(list.length > 50) list = list.slice(0,50);
+    saveBoard(list);
+    msgEl.textContent = `New Best! ${score}`;
+  }else{
+    msgEl.textContent = `Score: ${score} (Best: ${prev})`;
+  }
+
+  updateBestFromLeaderboard();
 }
 
-// ---- Start Game ----
-kokkyImg.onload = () => update();
+function update(){
+  player.vy += gravity;
+  player.y += player.vy;
+
+  if(player.y + player.r > H){
+    endGame();
+    return;
+  }
+
+  spawnTimer++;
+  if(spawnTimer > 85){
+    spawnTimer = 0;
+    addObstacle();
+  }
+
+  obstacles.forEach(o=>{
+    o.x -= 3;
+    if(!o.passed && o.x + 40 < player.x){
+      o.passed = true;
+      score++;
+      scoreEl.textContent = score;
+    }
+  });
+
+  obstacles = obstacles.filter(o=>o.x > -60);
+
+  for(const o of obstacles){
+    if(collide(o)){
+      endGame();
+      return;
+    }
+  }
+}
+
+function draw(){
+  ctx.fillStyle = "#0b0f25";
+  ctx.fillRect(0,0,W,H);
+
+  // obstacles
+  ctx.fillStyle = "rgba(240,240,255,0.75)";
+  obstacles.forEach(o=>{
+    ctx.fillRect(o.x,0,40,o.top);
+    ctx.fillRect(o.x,o.top+o.gap,40,H-(o.top+o.gap));
+  });
+
+  // Kokky sprite
+  if(kokkyLoaded){
+    const size = 64;
+    ctx.drawImage(kokkyImg, player.x - size/2, player.y - size/2, size, size);
+  }else{
+    // fallback circle while loading
+    ctx.fillStyle="#fff";
+    ctx.beginPath();
+    ctx.ellipse(player.x,player.y,player.r,player.r*1.1,0,0,Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function loop(){
+  if(!running){
+    draw();
+    return;
+  }
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+draw();
+if(!currentPlayerId){
+  openPlayerOverlay();
+}
