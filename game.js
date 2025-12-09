@@ -1,4 +1,4 @@
-// Kokky's Onsen Dash – Flappy-style with ranks, carrot waves, Kokky sprite, team IDs
+// Kokky's Onsen Dash – Flappy-style with ranks, carrot waves, Kokky sprite, team IDs, best rank in scoreboard
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -261,6 +261,15 @@ function updateBestFromLeaderboard(){
   bestEl.textContent = best;
 }
 
+// Returns highest rank index reached for a given obstacle count
+function getRankIndexForObstacles(count){
+  let idx = -1;
+  for(let i=0; i<RANKS.length; i++){
+    if(count >= RANKS[i].threshold) idx = i;
+  }
+  return idx;
+}
+
 // Game control
 function startGame() {
   if(!currentPlayerId){
@@ -296,7 +305,6 @@ function addObstacle(){
   const baseCenter = minCenter + Math.random()*(maxCenter - minCenter);
   const mix = 0.7 * baseCenter + 0.3 * player.y;
   const center = Math.max(minCenter, Math.min(maxCenter, mix));
-
   const top = center - gapSize/2;
 
   obstacles.push({
@@ -316,7 +324,7 @@ function spawnCarrotWave() {
   for(let i=0;i<5;i++){
     const offsetY = Math.sin(i * 0.7) * 40;
     carrots.push({
-      x: W + 40 + i*30,
+      x: W + 80 + i*32, // start a bit further right than obstacle
       y: baseY + offsetY,
       r: 10,
       golden: (i === goldenIndex)
@@ -351,24 +359,48 @@ function endGame(){
     return;
   }
 
+  const runRankIndex = getRankIndexForObstacles(obstaclesPassed);
+
   let list = loadBoard();
   let entry = list.find(e=>e.id === currentPlayerId);
-  const prev = entry ? entry.score : 0;
+  const prevScore = entry ? entry.score : 0;
+  const prevRankIndex = entry && typeof entry.bestRankIndex === "number" ? entry.bestRankIndex : -1;
 
-  if(score > prev){
-    if(!entry){
-      entry = {id: currentPlayerId, score, ts: Date.now()};
-      list.push(entry);
-    }else{
+  // Always keep best rank; keep best score separately
+  const isBetterScore = score > prevScore;
+  const isBetterRank  = runRankIndex > prevRankIndex;
+
+  if(!entry){
+    entry = {
+      id: currentPlayerId,
+      score: score,
+      ts: Date.now(),
+      bestRankIndex: runRankIndex
+    };
+    list.push(entry);
+  }else{
+    if(isBetterScore){
       entry.score = score;
       entry.ts = Date.now();
     }
-    list.sort((a,b)=>b.score - a.score || a.ts - b.ts);
-    if(list.length > 50) list = list.slice(0,50);
-    saveBoard(list);
+    if(isBetterRank){
+      entry.bestRankIndex = runRankIndex;
+      if(!isBetterScore){
+        entry.ts = Date.now(); // update timestamp when rank improves
+      }
+    }
+  }
+
+  // Sort by score desc, then older timestamp first
+  list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
+  if(list.length > 50) list = list.slice(0,50);
+  saveBoard(list);
+
+  const bestLabelRank = prevScore > 0 ? `(Best: ${prevScore})` : "";
+  if(isBetterScore){
     msgEl.textContent = `New Best! ${score}`;
   }else{
-    msgEl.textContent = `Score: ${score} (Best: ${prev})`;
+    msgEl.textContent = `Score: ${score} ${bestLabelRank}`;
   }
 
   updateBestFromLeaderboard();
@@ -399,8 +431,21 @@ function updateGame(){
     return;
   }
 
-  // only spawn obstacles if no carrot wave on screen
-  if(carrots.length === 0){
+  const speed = obstaclesPassed >= 60 ? boostedSpeed : baseSpeed;
+
+  // Obstacle spawn – allow spawn unless carrots are in right half
+  let canSpawnObstacle = true;
+  if(carrots.length > 0){
+    let maxCarrotX = -Infinity;
+    for(const c of carrots){
+      if(c.x > maxCarrotX) maxCarrotX = c.x;
+    }
+    if(maxCarrotX > W/2){
+      canSpawnObstacle = false;
+    }
+  }
+
+  if(canSpawnObstacle){
     spawnTimer++;
     if(spawnTimer > 85){
       spawnTimer = 0;
@@ -408,9 +453,7 @@ function updateGame(){
     }
   }
 
-  const speed = obstaclesPassed >= 60 ? boostedSpeed : baseSpeed;
-
-  // obstacles
+  // Obstacles movement / scoring
   obstacles.forEach(o=>{
     o.x -= speed;
     if(!o.passed && o.x + 40 < player.x){
@@ -438,7 +481,7 @@ function updateGame(){
     }
   }
 
-  // carrots
+  // carrots movement / collecting
   carrots.forEach(c=>{
     c.x -= speed;
   });
@@ -518,7 +561,7 @@ function draw(){
     ctx.fillRect(bx,by,boxW,boxH);
 
     ctx.fillStyle = "#ffe79c";
-    ctx.font = "12px 'Handjet'";
+    ctx.font = "16px 'Handjet'";
     ctx.textAlign = "center";
     ctx.fillText("Rank Up!", W/2, by+24);
 
