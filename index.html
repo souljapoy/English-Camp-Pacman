@@ -1,25 +1,43 @@
-<!DOCTYPE html>
-<html>
+ <!DOCTYPE html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>English Camp Pac-Man</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>Kokky's Onsen Dash</title>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<h1>English Camp Pac-Man</h1>
-
-<canvas id="gameCanvas" width="420" height="540"></canvas>
-
-<div class="controls">
-    <button id="playButton">PLAY</button>
+<div id="hud">
+  <div id="scoreBox">
+    Score: <span id="score">0</span>
+    &nbsp;|&nbsp;
+    Best: <span id="best">0</span>
+  </div>
+  <button id="startBtn">Play</button>
 </div>
 
+<div id="msg"></div>
+<canvas id="game" width="480" height="640"></canvas>
+
+<!-- Name entry popup -->
+<div id="overlay" class="hidden"></div>
+<div id="namePopup" class="hidden">
+  <h2>New High Score!</h2>
+  <p>Enter your name (W/R/G/B + Name):</p>
+  <input id="nameInput" type="text" maxlength="20" placeholder="R Daichi" />
+  <p id="nameError"></p>
+  <div class="popupButtons">
+    <button id="submitNameBtn">Submit</button>
+    <button id="cancelNameBtn">Cancel</button>
+  </div>
+</div>
+
+<p class="help">
+Tap / Click / Space to hop through the onsen steam.<br>
+Local test version with leaderboard popup.
+</p>
+
 <script src="game.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-<script src="leaderboard.js"></script>
-
-
 </body>
 </html>
