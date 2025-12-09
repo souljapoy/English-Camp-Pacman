@@ -4,13 +4,22 @@
   <meta charset="UTF-8" />
   <title>Kokky's Onsen Dash – Leaderboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Handjet:wght@300;500;700&display=swap" rel="stylesheet">
+
   <style>
     *{box-sizing:border-box;}
-    body{
+    html,body{
       margin:0;
+      padding:0;
+      height:100%;
+    }
+    body{
       background:#050814;
       color:#f4f4ff;
-      font-family:"Press Start 2P",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+      font-family:"Handjet",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
       min-height:100vh;
       display:flex;
       justify-content:center;
@@ -19,19 +28,19 @@
     #wrap{
       width:100%;
       max-width:520px;
-      padding:14px;
+      padding:10px;
     }
     h1{
-      margin:0 0 8px;
-      font-size:1.0rem;
+      margin:0 0 6px;
+      font-size:1rem;
       color:#ffd36b;
       text-align:center;
     }
     p.note{
-      font-size:0.55rem;
+      font-size:0.65rem;
       color:#a8b0ff;
       text-align:center;
-      margin:2px 0 10px;
+      margin:4px 0 10px;
     }
     table{
       width:100%;
@@ -60,11 +69,11 @@
       font-weight:600;
     }
     .backBtn{
-      margin-top:12px;
+      margin-top:10px;
       display:inline-block;
       background:#ff6b8b;
       color:#150818;
-      padding:8px 14px;
+      padding:6px 12px;
       border-radius:10px;
       font-weight:700;
       text-decoration:none;
@@ -73,14 +82,34 @@
     .backBtn:hover{
       filter:brightness(1.05);
     }
+
+    @media (max-width:600px){
+      #wrap{
+        padding:8px;
+      }
+      h1{
+        font-size:0.9rem;
+      }
+      p.note{
+        font-size:0.6rem;
+      }
+      table{
+        font-size:0.65rem;
+      }
+      .backBtn{
+        font-size:0.65rem;
+        padding:6px 10px;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="wrap">
     <h1>Kokky's Onsen Dash – Top Players</h1>
     <p class="note">
-      Local leaderboard on this device (max 50 entries).<br/>
-      Player ID = Team-Number (e.g., W-18, R-A) or 0 for Guest.
+      Local leaderboard on <strong>this device only</strong>.<br/>
+      Your scores are also saved to an overall leaderboard online.<br/><br/>
+      Player ID = TeamColor-Number (ex: W-18, R-A)
     </p>
     <table id="lbTable">
       <thead>
@@ -125,7 +154,7 @@
         const scoreTd = document.createElement("td");
 
         rankTd.textContent = idx+1;
-        playerTd.textContent = e.id || "-";
+        playerTd.textContent = (e.id === "0" ? "Guest" : (e.id || "-"));
         scoreTd.textContent = e.score;
         scoreTd.className = "score";
 
