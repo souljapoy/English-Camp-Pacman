@@ -1,4 +1,4 @@
-// Kokky's Onsen Dash – Team + Number Version (with Kokky image instead of circle)
+// Kokky's Onsen Dash – Flappy-style with ranks, carrots, Kokky sprite, team IDs
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -23,56 +23,62 @@ const H = canvas.height;
 
 // Team config
 const TEAM_CONFIG = {
-  W: { // White
-    label: "White",
-    numbers: [5,8,9,18,19,22,28,29,30,34],
-    alts: ["A","B"]
-  },
-  R: { // Red
-    label: "Red",
-    numbers: [1,4,6,7,11,13,20,21,27,31,40],
-    alts: ["A","B"]
-  },
-  B: { // Blue
-    label: "Blue",
-    numbers: [2,3,15,16,17,25,32,33,38,41],
-    alts: ["A","B"]
-  },
-  G: { // Green
-    label: "Green",
-    numbers: [10,12,14,23,24,26,35,36,37,39],
-    alts: ["A","B"]
-  },
-  Guest: {
-    label: "Guest",
-    numbers: [0],
-    alts: []
-  }
+  W: { label: "White", numbers: [5,8,9,18,19,22,28,29,30,34], alts: ["A","B"] },
+  R: { label: "Red",   numbers: [1,4,6,7,11,13,20,21,27,31,40], alts: ["A","B"] },
+  B: { label: "Blue",  numbers: [2,3,15,16,17,25,32,33,38,41], alts: ["A","B"] },
+  G: { label: "Green", numbers: [10,12,14,23,24,26,35,36,37,39], alts: ["A","B"] },
+  Guest: { label: "Guest", numbers: [0], alts: [] }
 };
+
+// Rank thresholds (by obstacles passed)
+const RANKS = [
+  { threshold: 25,  title: "Steam Hopper" },
+  { threshold: 50,  title: "Onsen Ace" },
+  { threshold: 75,  title: "Steam Master" },
+  { threshold: 100, title: "Onsen Overlord" },
+  { threshold: 250, title: "King of the Onsen" },
+  { threshold: 500, title: "Onsen Legend" },
+  { threshold: 1000, title: "Onsen God" }
+];
 
 // Game state
 let running = false;
 let obstacles = [];
+let carrots = [];
 let score = 0;
+let obstaclesPassed = 0;
+let carrotWaveCount = 0;
+let lastCarrotWaveObstacleCount = 0;
 
-// Player state
 let currentPlayerId = localStorage.getItem("onsen_player_id") || null;
 
-updatePlayerLabel();
-updateBestFromLeaderboard();
-
-// Physics
+// Player physics
 let player = { x: 120, y: H/2, vy: 0, r: 24 };
 const gravity = 0.45;
 const hopPower = -8.8;
 const gapSize = 180;
 let spawnTimer = 0;
 
-// Kokky image
+const baseSpeed = 3;
+const boostedSpeed = 3.8;
+
+// Rank popup
+let nextRankIndex = 0;
+let rankPopupTimer = 0;
+let rankPopupTitle = "";
+
+// Screen shake
+let shakeTimer = 0;
+
+// Kokky sprite
 const kokkyImg = new Image();
 kokkyImg.src = "kokky.png";
 let kokkyLoaded = false;
 kokkyImg.onload = () => { kokkyLoaded = true; };
+
+// Init UI
+updatePlayerLabel();
+updateBestFromLeaderboard();
 
 // Controls
 window.addEventListener("keydown", e=>{
@@ -255,7 +261,7 @@ function updateBestFromLeaderboard(){
   bestEl.textContent = best;
 }
 
-// Game logic
+// Game control
 function startGame() {
   if(!currentPlayerId){
     openPlayerOverlay();
@@ -263,13 +269,19 @@ function startGame() {
   }
   running = true;
   score = 0;
+  obstaclesPassed = 0;
+  carrotWaveCount = 0;
+  lastCarrotWaveObstacleCount = 0;
+  nextRankIndex = 0;
+  rankPopupTimer = 0;
+  rankPopupTitle = "";
   scoreEl.textContent = score;
   msgEl.textContent = "";
   obstacles = [];
+  carrots = [];
   player.y = H/2;
   player.vy = 0;
   spawnTimer = 0;
-  loop();
 }
 
 function hop() {
@@ -277,8 +289,16 @@ function hop() {
   player.vy = hopPower;
 }
 
+// Spawning
 function addObstacle(){
-  const top = 40 + Math.random()*(H - 260);
+  const minCenter = 120;
+  const maxCenter = H - 120;
+  const baseCenter = minCenter + Math.random()*(maxCenter - minCenter);
+  const mix = 0.7 * baseCenter + 0.3 * player.y;
+  const center = Math.max(minCenter, Math.min(maxCenter, mix));
+
+  const top = center - gapSize/2;
+
   obstacles.push({
     x: W + 40,
     top,
@@ -287,7 +307,25 @@ function addObstacle(){
   });
 }
 
-function collide(o){
+function spawnCarrotWave() {
+  carrotWaveCount++;
+  const hasGolden = (carrotWaveCount % 3 === 0);
+  const goldenIndex = hasGolden ? Math.floor(Math.random()*5) : -1;
+  const baseY = H/2;
+
+  for(let i=0;i<5;i++){
+    const offsetY = Math.sin(i * 0.7) * 40;
+    carrots.push({
+      x: W + 40 + i*30,
+      y: baseY + offsetY,
+      r: 10,
+      golden: (i === goldenIndex)
+    });
+  }
+}
+
+// Collision
+function collideObstacle(o){
   if(player.x + player.r > o.x && player.x - player.r < o.x + 40){
     if(player.y - player.r < o.top || player.y + player.r > o.top + o.gap){
       return true;
@@ -296,8 +334,17 @@ function collide(o){
   return false;
 }
 
+function collideCarrot(c){
+  const dx = player.x - c.x;
+  const dy = player.y - c.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  return dist < (player.r + c.r);
+}
+
+// Game over
 function endGame(){
   running = false;
+  shakeTimer = 12;
 
   if(!currentPlayerId || score <= 0){
     msgEl.textContent = `Score: ${score}`;
@@ -327,11 +374,27 @@ function endGame(){
   updateBestFromLeaderboard();
 }
 
-function update(){
+// Rank check
+function checkRankUp() {
+  if(nextRankIndex >= RANKS.length) return;
+  const nextRank = RANKS[nextRankIndex];
+  if(obstaclesPassed >= nextRank.threshold){
+    rankPopupTitle = nextRank.title;
+    rankPopupTimer = 90; // frames
+    nextRankIndex++;
+  }
+}
+
+// Update loop
+function updateGame(){
+  if(!running) return;
+
+  // physics
   player.vy += gravity;
   player.y += player.vy;
 
-  if(player.y + player.r > H){
+  // floor/ceiling
+  if(player.y + player.r > H || player.y - player.r < 0){
     endGame();
     return;
   }
@@ -342,60 +405,139 @@ function update(){
     addObstacle();
   }
 
+  const speed = obstaclesPassed >= 60 ? boostedSpeed : baseSpeed;
+
+  // obstacles
   obstacles.forEach(o=>{
-    o.x -= 3;
+    o.x -= speed;
     if(!o.passed && o.x + 40 < player.x){
       o.passed = true;
+      obstaclesPassed++;
       score++;
       scoreEl.textContent = score;
+
+      checkRankUp();
+
+      if(obstaclesPassed % 5 === 0 && obstaclesPassed !== lastCarrotWaveObstacleCount){
+        lastCarrotWaveObstacleCount = obstaclesPassed;
+        spawnCarrotWave();
+      }
     }
   });
 
   obstacles = obstacles.filter(o=>o.x > -60);
 
   for(const o of obstacles){
-    if(collide(o)){
+    if(collideObstacle(o)){
       endGame();
       return;
     }
   }
+
+  // carrots
+  carrots.forEach(c=>{
+    c.x -= speed;
+  });
+  carrots = carrots.filter(c=>{
+    if(collideCarrot(c)){
+      score += c.golden ? 5 : 2;
+      scoreEl.textContent = score;
+      return false;
+    }
+    return c.x > -30;
+  });
 }
 
+// Draw
 function draw(){
-  ctx.fillStyle = "#0b0f25";
+  ctx.save();
+
+  if(shakeTimer > 0){
+    const dx = (Math.random()*4 - 2);
+    const dy = (Math.random()*4 - 2);
+    ctx.translate(dx, dy);
+    shakeTimer--;
+  }
+
+  // background
+  ctx.fillStyle = "#050716";
   ctx.fillRect(0,0,W,H);
 
+  // simple sky gradient
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, "#060b2a");
+  grad.addColorStop(1, "#0b1028");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // moon
+  ctx.fillStyle = "#f5f7ff";
+  ctx.beginPath();
+  ctx.arc(W-70,80,26,0,Math.PI*2);
+  ctx.fill();
+
   // obstacles
-  ctx.fillStyle = "rgba(240,240,255,0.75)";
   obstacles.forEach(o=>{
+    ctx.fillStyle = "rgba(240,240,255,0.8)";
     ctx.fillRect(o.x,0,40,o.top);
     ctx.fillRect(o.x,o.top+o.gap,40,H-(o.top+o.gap));
   });
 
-  // Kokky sprite
+  // carrots
+  carrots.forEach(c=>{
+    ctx.fillStyle = c.golden ? "#ffd94a" : "#ff9d3b";
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // player
   if(kokkyLoaded){
     const size = 64;
     ctx.drawImage(kokkyImg, player.x - size/2, player.y - size/2, size, size);
   }else{
-    // fallback circle while loading
     ctx.fillStyle="#fff";
     ctx.beginPath();
-    ctx.ellipse(player.x,player.y,player.r,player.r*1.1,0,0,Math.PI*2);
+    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
     ctx.fill();
   }
+
+  // rank popup
+  if(rankPopupTimer > 0){
+    const alpha = rankPopupTimer > 20 ? 1 : rankPopupTimer/20;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#000000aa";
+    const boxW = 260;
+    const boxH = 60;
+    const bx = (W - boxW)/2;
+    const by = 90;
+    ctx.fillRect(bx,by,boxW,boxH);
+
+    ctx.fillStyle = "#ffe79c";
+    ctx.font = "12px 'Press Start 2P'";
+    ctx.textAlign = "center";
+    ctx.fillText("Rank Up!", W/2, by+22);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(rankPopupTitle, W/2, by+42);
+
+    ctx.globalAlpha = 1;
+    rankPopupTimer--;
+  }
+
+  ctx.restore();
 }
 
+// Main loop
 function loop(){
-  if(!running){
-    draw();
-    return;
-  }
-  update();
+  updateGame();
   draw();
   requestAnimationFrame(loop);
 }
 
-draw();
+loop();
+
+// If no player selected yet, force overlay once
 if(!currentPlayerId){
   openPlayerOverlay();
 }
