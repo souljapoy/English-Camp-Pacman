@@ -9,8 +9,8 @@ html, body {
 /* Main layout */
 
 body {
-  /* full-screen night-sky style gradient, also behind UI */
-  background: radial-gradient(circle at top, #172751 0%, #050814 55%, #02040b 100%);
+  /* solid night-sky tone behind UI and around canvas */
+  background: #02040b;
   color: #f4f4ff;
   font-family: "Handjet", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   display: flex;
