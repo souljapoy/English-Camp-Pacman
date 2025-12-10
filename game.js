@@ -1,37 +1,35 @@
-// Kokky's Hot Spring Hop – Full Advanced Version
-// Fixed: hop sound every time + removed mid white band + safe UI checks
+// Kokky's Hot Spring Hop – polished: bamboo obstacles, bottom steam only, improved carrots & spacing
 
-// ==========================
-// Canvas + base setup
-// ==========================
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const W = canvas.width = 540;
-const H = canvas.height = 960;
 
-// ==========================
-// UI Elements (safe check)
-// ==========================
-const scoreSpan = document.getElementById("score");
-const bestSpan  = document.getElementById("best");
-const rankSpan  = document.getElementById("rank");
-const playerIdSpan = document.getElementById("playerIdDisplay");
+const scoreEl = document.getElementById("score");
+const bestEl  = document.getElementById("best");
+const msgEl   = document.getElementById("msg");
 
-// load saved values
-let bestScore = +localStorage.getItem("onsen_bestScore") || 0;
-if(bestSpan) bestSpan.textContent = bestScore;
+const playerOverlay = document.getElementById("playerOverlay");
+const playerIdLabel = document.getElementById("playerIdLabel");
+const changePlayerBtn = document.getElementById("changePlayerBtn");
 
-// ==========================
-// Player setup
-// ==========================
-const player = { x:110, y:H*0.5, vy:0, r:34 };
-const gravity = 0.32;
-const hopPower = -7.4;
+const teamButtonsContainer = document.getElementById("teamButtons");
+const numberList = document.getElementById("numberList");
+const selectedPreview = document.getElementById("selectedPreview");
+const confirmPlayerBtn = document.getElementById("confirmPlayerBtn");
+const cancelPlayerBtn = document.getElementById("cancelPlayerBtn");
 
-// ==========================
-// Ranks — YOUR ACTUAL SYSTEM
-// (from your uploaded file)
-// ==========================
+const W = canvas.width;
+const H = canvas.height;
+
+// Team config
+const TEAM_CONFIG = {
+  W: { label: "White", numbers: [5,8,9,18,19,22,28,29,30,34], alts: ["A","B"] },
+  R: { label: "Red",   numbers: [1,4,6,7,11,13,20,21,27,31,40], alts: ["A","B"] },
+  B: { label: "Blue",  numbers: [2,3,15,16,17,25,32,33,38,41], alts: ["A","B"] },
+  G: { label: "Green", numbers: [10,12,14,23,24,26,35,36,37,39], alts: ["A","B"] },
+  Guest: { label: "Guest", numbers: [0], alts: [] }
+};
+
+// Rank thresholds (by obstacles passed)
 const RANKS = [
   { threshold: 25,  title: "Steam Hopper" },
   { threshold: 50,  title: "Onsen Ace" },
@@ -42,353 +40,770 @@ const RANKS = [
   { threshold: 1000, title: "Onsen God" }
 ];
 
-let currentRank = "";
-function updateRank(){
-  let next = "";
-  for(const r of RANKS){
-    if(score >= r.threshold) next = r.title;
-  }
-  currentRank = next;
-  if(rankSpan) rankSpan.textContent = currentRank;
-}
+// Game state
+let running = false;
+let obstacles = [];
+let carrots = [];
+let score = 0;
+let obstaclesPassed = 0;
+let carrotWaveCount = 0;
+let lastCarrotWaveObstacleCount = 0;
+let carrotPatternIndex = 0;
 
-// ==========================
-// Hop Sound — single MP3
-// ==========================
-const hopAudio = new Audio("hop1.mp3");
-hopAudio.volume = 0.32;
+let currentPlayerId = localStorage.getItem("onsen_player_id") || null;
 
-function playHopSound(){
-  try { hopAudio.currentTime = 0; } catch(e){}
-  hopAudio.play().catch(()=>{});
-}
+// Player physics
+let player = { x: 120, y: H/2, vy: 0, r: 24 };
+const gravity = 0.45;
+const hopPower = -8.8;
+const gapSize = 180;
+let spawnTimer = 0;
 
-// ==========================
-// Graphics
-// ==========================
+const baseSpeed = 3;
+const boostedSpeed = 3.8; // after 60 obstacles
+
+// Rank popup
+let nextRankIndex = 0;
+let rankPopupTimer = 0;
+let rankPopupTitle = "";
+
+// Screen shake
+let shakeTimer = 0;
+
+// Hop steam particles (small & subtle)
+let hopPuffs = [];
+
+// Background elements
+let stars = [];
+let lanternPhase = 0;
+
+// Kokky sprite
 const kokkyImg = new Image();
 kokkyImg.src = "kokky.png";
+let kokkyLoaded = false;
+kokkyImg.onload = () => { kokkyLoaded = true; };
 
-let kokkyReady = false;
-kokkyImg.onload = () => kokkyReady = true;
+// Init UI
+updatePlayerLabel();
+updateBestFromLeaderboard();
+initStars();
 
-// ==========================
-// Effects
-// ==========================
-const snowflakes = [];
-function initSnow(){
-  snowflakes.length = 0;
-  for(let i=0;i<70;i++){
-    snowflakes.push({
-      x:Math.random()*W,
-      y:Math.random()*H,
-      r:Math.random()*2+1,
-      vy:Math.random()*0.8+0.4
-    });
-  }
-}
-initSnow();
-
-const hopPuffs = [];
-
-// ==========================
-// Obstacles + carrots
-// ==========================
-const obstacles = [];
-const carrots = [];
-
-let score = 0;
-if(scoreSpan) scoreSpan.textContent = score;
-
-let running = false;
-let frame = 0;
-let scrollSpeed = 3.2;
-
-// carrot wave spacing tuned
-const CARROT_WAVE_SIZE = 5;
-const CARROT_WAVE_GAP = 0.5;
-
-function addObstacle(){
-  const gap = 150;
-  const center = Math.random()*(H-250)+125;
-  const top = center-gap/2;
-  const bottom = center+gap/2;
-  const width = 66;
-
-  let lastX = W+100;
-  if(obstacles.length){
-    lastX = obstacles.at(-1).x;
-  }
-
-  obstacles.push({
-    x:lastX+180,
-    width,
-    top,
-    bottom,
-    passed:false
-  });
-}
-
-function addCarrotWave(xstart){
-  const y = player.y;
-  for(let i=0;i<CARROT_WAVE_SIZE;i++){
-    carrots.push({
-      x:xstart+i*24,
-      y:y-40,
-      radius:7,
-      collected:false,
-      golden:i==Math.floor(CARROT_WAVE_SIZE/2)
-    });
-  }
-}
-
-// ==========================
-// Input control
-// ==========================
-function hop(){
-  if(!running) return;
-  player.vy = hopPower;
-  playHopSound();
-
-  hopPuffs.push({
-    x:player.x,
-    y:player.y+player.r,
-    radius:6,
-    alpha:0.35
-  });
-}
-
-canvas.addEventListener("pointerdown", ()=>{
-  if(!running) startGame();
-  else hop();
-});
-
+// Controls
 window.addEventListener("keydown", e=>{
-  if(e.code==="Space"){
-    if(!running) startGame();
-    else hop();
+  if(e.code === "Space"){
+    if(!running){
+      startGame();
+    }else{
+      hop();
+    }
     e.preventDefault();
   }
 });
 
-// ==========================
-// Game flow
-// ==========================
-function reset(){
-  score=0;
-  if(scoreSpan) scoreSpan.textContent=score;
-  player.y=H*0.5;
-  player.vy=0;
-  obstacles.length=0;
-  carrots.length=0;
-  hopPuffs.length=0;
-  frame=0;
-  scrollSpeed=3.2;
-  updateRank();
+canvas.addEventListener("pointerdown", () => {
+  if(!running){
+    startGame();
+  }else{
+    hop();
+  }
+});
+
+changePlayerBtn.addEventListener("click", () => {
+  openPlayerOverlay();
+});
+
+cancelPlayerBtn.addEventListener("click", () => {
+  closePlayerOverlay(false);
+});
+
+// Player overlay logic
+let selectedTeamKey = null;
+let selectedNumberCode = null;
+
+function openPlayerOverlay() {
+  selectedTeamKey = null;
+  selectedNumberCode = null;
+  confirmPlayerBtn.disabled = true;
+  selectedPreview.textContent = "Player: -";
+  numberList.innerHTML = '<p class="hint">Select a team first.</p>';
+  Array.from(document.querySelectorAll(".teamBtn")).forEach(btn=>{
+    btn.classList.remove("selected");
+  });
+  playerOverlay.classList.remove("hidden");
 }
 
-function startGame(){
-  reset();
-  running=true;
+function closePlayerOverlay(committed) {
+  playerOverlay.classList.add("hidden");
+  if(!committed && !currentPlayerId){
+    setTimeout(openPlayerOverlay, 10);
+  }
 }
 
-// ==========================
-// Collision + scoring
-// ==========================
-function checkObstacleCollision(){
-  for(const o of obstacles){
-    if(player.x+player.r > o.x && player.x-player.r < o.x+o.width){
-      if(player.y-player.r < o.top || player.y+player.r > o.bottom){
-        return true;
-      }
+teamButtonsContainer.addEventListener("click", e=>{
+  const btn = e.target.closest(".teamBtn");
+  if(!btn) return;
+  const teamKey = btn.dataset.team;
+  selectedTeamKey = teamKey;
+  selectedNumberCode = null;
+  confirmPlayerBtn.disabled = true;
+  selectedPreview.textContent = "Player: -";
+
+  Array.from(teamButtonsContainer.querySelectorAll(".teamBtn")).forEach(b=>{
+    b.classList.toggle("selected", b === btn);
+  });
+
+  buildNumberList(teamKey);
+});
+
+function buildNumberList(teamKey) {
+  const cfg = TEAM_CONFIG[teamKey];
+  numberList.innerHTML = "";
+  if(!cfg){
+    numberList.innerHTML = '<p class="hint">Unknown team.</p>';
+    return;
+  }
+
+  if(teamKey === "Guest") {
+    const btn = document.createElement("button");
+    btn.textContent = "0 – Guest";
+    btn.dataset.code = "0";
+    btn.addEventListener("click", ()=>selectNumberCode("0", btn));
+    numberList.appendChild(btn);
+    return;
+  }
+
+  const allCodes = [...cfg.numbers.map(n=>String(n)), ...cfg.alts];
+
+  allCodes.forEach(code => {
+    const btn = document.createElement("button");
+    if(code === "A" || code === "B"){
+      btn.textContent = `${code} (ALT)`;
+    }else{
+      btn.textContent = code;
+    }
+    btn.dataset.code = code;
+    btn.addEventListener("click", ()=>selectNumberCode(code, btn));
+    numberList.appendChild(btn);
+  });
+}
+
+function selectNumberCode(code, btn) {
+  selectedNumberCode = code;
+  Array.from(numberList.querySelectorAll("button")).forEach(b=>{
+    b.classList.remove("selected");
+  });
+  btn.classList.add("selected");
+  updatePreviewAndButton();
+}
+
+function updatePreviewAndButton() {
+  if(!selectedTeamKey || !selectedNumberCode){
+    confirmPlayerBtn.disabled = true;
+    selectedPreview.textContent = "Player: -";
+    return;
+  }
+
+  let idStr;
+  if(selectedTeamKey === "Guest"){
+    idStr = "0";
+  }else{
+    idStr = `${selectedTeamKey}-${selectedNumberCode}`;
+  }
+  selectedPreview.textContent = `Player: ${idStr}`;
+  confirmPlayerBtn.disabled = false;
+}
+
+confirmPlayerBtn.addEventListener("click", () => {
+  if(!selectedTeamKey || !selectedNumberCode){
+    return;
+  }
+  let idStr;
+  if(selectedTeamKey === "Guest"){
+    idStr = "0";
+  }else{
+    idStr = `${selectedTeamKey}-${selectedNumberCode}`;
+  }
+  currentPlayerId = idStr;
+  localStorage.setItem("onsen_player_id", currentPlayerId);
+  updatePlayerLabel();
+  updateBestFromLeaderboard();
+  closePlayerOverlay(true);
+});
+
+// Helpers
+function updatePlayerLabel() {
+  if(!currentPlayerId){
+    playerIdLabel.textContent = "Not set";
+  }else{
+    playerIdLabel.textContent = currentPlayerId;
+  }
+}
+
+function loadBoard(){
+  try{
+    const raw = localStorage.getItem("onsen_lb");
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){
+    return [];
+  }
+}
+
+function saveBoard(list){
+  localStorage.setItem("onsen_lb", JSON.stringify(list));
+}
+
+function updateBestFromLeaderboard(){
+  if(!currentPlayerId){
+    bestEl.textContent = "0";
+    return;
+  }
+  const list = loadBoard();
+  const entry = list.find(e=>e.id === currentPlayerId);
+  const best = entry ? entry.score : 0;
+  bestEl.textContent = best;
+}
+
+function getRankIndexForObstacles(count){
+  let idx = -1;
+  for(let i=0; i<RANKS.length; i++){
+    if(count >= RANKS[i].threshold) idx = i;
+  }
+  return idx;
+}
+
+// Background init
+function initStars(){
+  stars = [];
+  for(let i=0;i<60;i++){
+    stars.push({
+      x: Math.random()*W,
+      y: Math.random()*H*0.5,
+      phase: Math.random()*Math.PI*2,
+      warm: Math.random() < 0.3 // 30% yellowish
+    });
+  }
+}
+
+// Game control
+function startGame() {
+  if(!currentPlayerId){
+    openPlayerOverlay();
+    return;
+  }
+  running = true;
+  score = 0;
+  obstaclesPassed = 0;
+  carrotWaveCount = 0;
+  lastCarrotWaveObstacleCount = 0;
+  carrotPatternIndex = 0;
+  nextRankIndex = 0;
+  rankPopupTimer = 0;
+  rankPopupTitle = "";
+  scoreEl.textContent = score;
+  msgEl.textContent = "";
+  obstacles = [];
+  carrots = [];
+  hopPuffs = [];
+  player.y = H/2;
+  player.vy = 0;
+  spawnTimer = 0;
+}
+
+function hop() {
+  if(!running) return;
+  player.vy = hopPower;
+
+  // small, subtle hop steam
+  hopPuffs.push({
+    x: player.x,
+    y: player.y + player.r,
+    radius: 6,
+    alpha: 0.35
+  });
+}
+
+// Spawning
+function addObstacle(){
+  const minCenter = 120;
+  const maxCenter = H - 120;
+  const baseCenter = minCenter + Math.random()*(maxCenter - minCenter);
+  const mix = 0.7 * baseCenter + 0.3 * player.y;
+  const center = Math.max(minCenter, Math.min(maxCenter, mix));
+  const top = center - gapSize/2;
+
+  obstacles.push({
+    x: W + 40,
+    top,
+    gap: gapSize,
+    passed: false
+  });
+}
+
+// Carrot wave: 10 carrots, random pattern order; normal = 1pt, golden = 5pts
+function spawnCarrotWave() {
+  carrotWaveCount++;
+  const goldenIndex = Math.floor(Math.random()*10); // one golden per wave
+
+  const pattern = carrotPatternIndex % 5;
+  carrotPatternIndex++;
+
+  const baseX = W + 60;
+  const stepX = 24;
+  const baseY = H/2;
+
+  for(let i=0;i<10;i++){
+    let offsetY = 0;
+    if(pattern === 0){
+      // U-shape
+      const center = 4.5;
+      const d = i - center;
+      offsetY = d*d * 3;
+    }else if(pattern === 1){
+      // rising diagonal ↗
+      offsetY = -30 + i*6;
+    }else if(pattern === 2){
+      // falling diagonal ↘
+      offsetY = 30 - i*6;
+    }else if(pattern === 3){
+      // flat mid-line
+      offsetY = -10;
+    }else if(pattern === 4){
+      // sine wave
+      offsetY = Math.sin(i * 0.8) * 25;
+    }
+
+    carrots.push({
+      x: baseX + i*stepX,
+      y: baseY + offsetY,
+      r: 14,
+      golden: (i === goldenIndex)
+    });
+  }
+}
+
+// Collision
+function collideObstacle(o){
+  if(player.x + player.r > o.x && player.x - player.r < o.x + 40){
+    if(player.y - player.r < o.top || player.y + player.r > o.top + o.gap){
+      return true;
     }
   }
   return false;
 }
 
-function collectCarrots(){
-  carrots.forEach(c=>{
-    if(c.collected) return;
-    const dx=player.x-c.x, dy=player.y-c.y;
-    if(Math.hypot(dx,dy) < player.r){
-      c.collected=true;
-      score += c.golden ? 5 : 2;
-      if(scoreSpan) scoreSpan.textContent=score;
-      updateRank();
-    }
-  });
+function collideCarrot(c){
+  const dx = player.x - c.x;
+  const dy = player.y - c.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  return dist < (player.r + c.r);
 }
 
-// ==========================
-// Render parts
-// ==========================
-function drawBackground(){
-  const g = ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,"#05091a");
-  g.addColorStop(1,"#0b122b");
-  ctx.fillStyle=g;
-  ctx.fillRect(0,0,W,H);
+// Game over
+function endGame(){
+  running = false;
+  shakeTimer = 12;
 
-  // mountains (bottom only)
-  ctx.fillStyle="#0e142f";
-  ctx.beginPath();
-  ctx.moveTo(0,H*0.6);
-  ctx.quadraticCurveTo(W*0.3,H*0.42,W*0.5,H*0.58);
-  ctx.quadraticCurveTo(W*0.8,H*0.45,W,H*0.6);
-  ctx.lineTo(W,H);
-  ctx.lineTo(0,H);
-  ctx.fill();
-}
-
-// snowfall behind obstacles
-function drawSnow(){
-  ctx.fillStyle="white";
-  snowflakes.forEach(s=>{
-    ctx.globalAlpha=0.7;
-    ctx.beginPath();
-    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-    ctx.fill();
-  });
-  ctx.globalAlpha=1;
-}
-
-function drawObstacles(){
-  ctx.fillStyle="#47693d";
-  obstacles.forEach(o=>{
-    ctx.fillRect(o.x,0,o.width,o.top);
-    ctx.fillRect(o.x,o.bottom,o.width,H-o.bottom);
-  });
-}
-
-function drawCarrots(){
-  carrots.forEach(c=>{
-    if(c.collected) return;
-    ctx.beginPath();
-    ctx.arc(c.x,c.y,c.radius,0,Math.PI*2);
-    ctx.fillStyle = c.golden ? "#ffd85a" : "#ff9f43";
-    ctx.fill();
-  });
-}
-
-function drawPlayer(){
-  if(kokkyReady){
-    ctx.drawImage(kokkyImg,player.x-32,player.y-30,64,54);
-  }else{
-    ctx.fillStyle="white";
-    ctx.beginPath();
-    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
-    ctx.fill();
-  }
-}
-
-function drawHopPuffs(){
-  ctx.globalAlpha=1;
-  hopPuffs.forEach(p=>{
-    ctx.globalAlpha=p.alpha;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,p.radius,0,Math.PI*2);
-    ctx.fillStyle="#dee8ff";
-    ctx.fill();
-  });
-  ctx.globalAlpha=1;
-}
-
-function drawOnsenSteam(){
-  ctx.save();
-  const g = ctx.createLinearGradient(0,H*0.9,0,H);
-  g.addColorStop(0,"rgba(200,210,228,0)");
-  g.addColorStop(1,"rgba(220,230,244,0.8)");
-  ctx.fillStyle=g;
-  ctx.fillRect(0,H*0.9,W,H*0.1);
-  ctx.restore();
-}
-
-// ==========================
-// Main Update Loop
-// ==========================
-function loop(){
-  requestAnimationFrame(loop);
-  frame++;
-
-  // background + snow
-  drawBackground();
-  drawSnow();
-
-  if(!running){
-    drawObstacles();
-    drawCarrots();
-    drawPlayer();
-    drawHopPuffs();
-    drawOnsenSteam();
+  if(!currentPlayerId || score <= 0){
+    msgEl.textContent = `Score: ${score}`;
     return;
   }
 
-  // physics
-  player.vy+=gravity;
-  player.y+=player.vy;
+  const runRankIndex = getRankIndexForObstacles(obstaclesPassed);
 
-  if(player.y-player.r<0) player.y=player.r;
-  if(player.y+player.r>H){ running=false; }
+  let list = loadBoard();
+  let entry = list.find(e=>e.id === currentPlayerId);
+  const prevScore = entry ? entry.score : 0;
+  const prevRankIndex = entry && typeof entry.bestRankIndex === "number" ? entry.bestRankIndex : -1;
 
-  snowflakes.forEach(s=>{
-    s.y+=s.vy;
-    if(s.y>H+10){
-      s.y=-10;
-      s.x=Math.random()*W;
+  const isBetterScore = score > prevScore;
+  const isBetterRank  = runRankIndex > prevRankIndex;
+
+  if(!entry){
+    entry = {
+      id: currentPlayerId,
+      score: score,
+      ts: Date.now(),
+      bestRankIndex: runRankIndex
+    };
+    list.push(entry);
+  }else{
+    if(isBetterScore){
+      entry.score = score;
+      entry.ts = Date.now();
     }
-  });
-
-  if(frame%80===0){
-    addObstacle();
+    if(isBetterRank){
+      entry.bestRankIndex = runRankIndex;
+      if(!isBetterScore){
+        entry.ts = Date.now();
+      }
+    }
   }
 
-  obstacles.forEach(o=>{
-    o.x -= scrollSpeed;
-    if(!o.passed && o.x+o.width < player.x){
-      o.passed=true;
-      score++;
-      if(scoreSpan) scoreSpan.textContent = score;
-      updateRank();
+  list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
+  if(list.length > 50) list = list.slice(0,50);
+  saveBoard(list);
 
-      addCarrotWave(o.x + o.width + (o.width*CARROT_WAVE_GAP));
-      if(score===60){
-        scrollSpeed=3.7;
+  if(isBetterScore){
+    msgEl.textContent = `New Best! ${score}`;
+  }else{
+    msgEl.textContent = `Score: ${score} (Best: ${prevScore})`;
+  }
+
+  updateBestFromLeaderboard();
+}
+
+// Rank check
+function checkRankUp() {
+  if(nextRankIndex >= RANKS.length) return;
+  const nextRank = RANKS[nextRankIndex];
+  if(obstaclesPassed >= nextRank.threshold){
+    rankPopupTitle = nextRank.title;
+    rankPopupTimer = 150;
+    nextRankIndex++;
+  }
+}
+
+// Update loop
+function updateGame(){
+  if(!running) return;
+
+  // physics
+  player.vy += gravity;
+  player.y += player.vy;
+
+  if(player.y + player.r > H || player.y - player.r < 0){
+    endGame();
+    return;
+  }
+
+  const speed = obstaclesPassed >= 60 ? boostedSpeed : baseSpeed;
+
+  // Spawn obstacles – allow spawn unless carrots still too far right
+  let canSpawnObstacle = true;
+  if(carrots.length > 0){
+    let maxCarrotX = -Infinity;
+    for(const c of carrots){
+      if(c.x > maxCarrotX) maxCarrotX = c.x;
+    }
+    // 0.5-ish spacing before next obstacle
+    if(maxCarrotX > W*0.5){
+      canSpawnObstacle = false;
+    }
+  }
+
+  if(canSpawnObstacle){
+    spawnTimer++;
+    if(spawnTimer > 85){
+      spawnTimer = 0;
+      addObstacle();
+    }
+  }
+
+  // Obstacles movement / scoring
+  obstacles.forEach(o=>{
+    o.x -= speed;
+    if(!o.passed && o.x + 40 < player.x){
+      o.passed = true;
+      obstaclesPassed++;
+      score++;
+      scoreEl.textContent = score;
+
+      checkRankUp();
+
+      // carrot wave every 10 obstacles
+      if(obstaclesPassed % 10 === 0 && obstaclesPassed !== lastCarrotWaveObstacleCount){
+        lastCarrotWaveObstacleCount = obstaclesPassed;
+        spawnCarrotWave();
       }
     }
   });
 
-  collectCarrots();
-  carrots.forEach(c => c.x -= scrollSpeed);
+  obstacles = obstacles.filter(o=>o.x > -60);
 
-  hopPuffs.forEach(p=>{
-    p.y-=0.3;
-    p.alpha-=0.015;
-  });
-
-  // cleanup
-  if(obstacles.length && obstacles[0].x+obstacles[0].width< -100) obstacles.shift();
-  if(carrots.length && carrots[0].x < -50) carrots.shift();
-  if(hopPuffs.length && hopPuffs[0].alpha<=0) hopPuffs.shift();
-
-  if(checkObstacleCollision()){
-    running=false;
-  }
-
-  // draw
-  drawObstacles();
-  drawCarrots();
-  drawPlayer();
-  drawHopPuffs();
-  drawOnsenSteam();
-
-  if(!running){
-    if(score>bestScore){
-      bestScore = score;
-      if(bestSpan) bestSpan.textContent = bestScore;
-      localStorage.setItem("onsen_bestScore",bestScore);
+  for(const o of obstacles){
+    if(collideObstacle(o)){
+      endGame();
+      return;
     }
   }
+
+  // carrots movement / collecting
+  carrots.forEach(c=>{
+    c.x -= speed;
+  });
+  carrots = carrots.filter(c=>{
+    if(collideCarrot(c)){
+      score += c.golden ? 5 : 1;
+      scoreEl.textContent = score;
+      return false;
+    }
+    return c.x > -30;
+  });
+
+  // hop steam puffs update (small & subtle)
+  hopPuffs.forEach(p=>{
+    p.y -= 0.6;
+    p.radius += 0.3;
+    p.alpha -= 0.03;
+  });
+  hopPuffs = hopPuffs.filter(p=>p.alpha > 0);
+
+  // background animation
+  lanternPhase += 0.02;
 }
 
-// start loop
+// Draw
+function draw(){
+  ctx.save();
+
+  if(shakeTimer > 0){
+    const dx = (Math.random()*4 - 2);
+    const dy = (Math.random()*4 - 2);
+    ctx.translate(dx, dy);
+    shakeTimer--;
+  }
+
+  // retro midnight sky inside canvas
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, "#0a1633");
+  grad.addColorStop(1, "#02040b");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // stars
+  ctx.save();
+  stars.forEach(s=>{
+    const tw = 0.5 + 0.5*Math.sin(performance.now()/400 + s.phase);
+    ctx.globalAlpha = 0.25 + 0.5*tw;
+    ctx.fillStyle = s.warm ? "#f6e69c" : "#e8f0ff";
+    ctx.fillRect(s.x, s.y, 2, 2);
+  });
+  ctx.restore();
+
+  // moon
+  ctx.save();
+  const moonX = W - 80;
+  const moonY = 80;
+  const moonR = 26;
+  const moonGrad = ctx.createRadialGradient(
+    moonX-8, moonY-8, 4,
+    moonX, moonY, moonR+6
+  );
+  moonGrad.addColorStop(0, "#fff9d9");
+  moonGrad.addColorStop(1, "#bba86a");
+  ctx.fillStyle = moonGrad;
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, moonR, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = "#d8c78a";
+  ctx.beginPath();
+  ctx.arc(moonX-8, moonY-6, 6, 0, Math.PI*2);
+  ctx.arc(moonX+5, moonY+4, 4, 0, Math.PI*2);
+  ctx.arc(moonX+10, moonY-10, 3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // smooth snowy Nagano mountains (M1)
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, H*0.58);
+  ctx.quadraticCurveTo(W*0.15, H*0.42, W*0.3, H*0.58);
+  ctx.quadraticCurveTo(W*0.5, H*0.38, W*0.7, H*0.58);
+  ctx.quadraticCurveTo(W*0.85, H*0.45, W, H*0.58);
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = "#090f24";
+  ctx.fill();
+
+  // snow caps band (very soft, not thick line)
+  const snowGrad = ctx.createLinearGradient(0, H*0.40, 0, H*0.58);
+  snowGrad.addColorStop(0, "rgba(229,236,255,0.6)");
+  snowGrad.addColorStop(1, "rgba(229,236,255,0)");
+  ctx.fillStyle = snowGrad;
+  ctx.fillRect(0, H*0.40, W, H*0.18);
+  ctx.restore();
+
+  // lantern runway BEHIND obstacles
+  ctx.save();
+  const lanternY = H*0.7;
+  for(let x = -20; x < W+40; x += 100){
+    const phase = lanternPhase + x*0.05;
+    const glow = 0.7 + 0.3*Math.sin(phase);
+    ctx.globalAlpha = 0.5 + 0.3*glow;
+
+    // lantern body
+    ctx.fillStyle = "#ffcf6b";
+    ctx.fillRect(x-4, lanternY-7, 8, 12);
+    // caps
+    ctx.fillStyle = "#b8762a";
+    ctx.fillRect(x-5, lanternY-8, 10, 2);
+    ctx.fillRect(x-5, lanternY+4, 10, 2);
+  }
+  ctx.restore();
+
+  // bottom onsen steam blanket (moved down)
+  ctx.save();
+  const steamGrad = ctx.createLinearGradient(0, H*0.9, 0, H);
+  steamGrad.addColorStop(0, "rgba(255,255,255,0)");
+  steamGrad.addColorStop(1, "rgba(255,255,255,0.4)");
+  ctx.fillStyle = steamGrad;
+  ctx.fillRect(0, H*0.85, W, H*0.15);
+  ctx.restore();
+
+  // obstacles: dark muted bamboo (B2-ish)
+  obstacles.forEach(o=>{
+    const bottomHeight = H - (o.top + o.gap);
+
+    const bambooMain = "#223726";
+    const bambooShadow = "#17251a";
+    const ringColor = "rgba(0,0,0,0.35)";
+
+    ctx.save();
+
+    // top shaft
+    ctx.fillStyle = bambooMain;
+    ctx.beginPath();
+    ctx.roundRect(o.x, 0, 40, o.top, 10);
+    ctx.fill();
+
+    // segment rings
+    ctx.strokeStyle = ringColor;
+    ctx.lineWidth = 2;
+    for(let y=20; y<o.top; y+=22){
+      ctx.beginPath();
+      ctx.moveTo(o.x+5, y);
+      ctx.lineTo(o.x+35, y+1);
+      ctx.stroke();
+    }
+
+    // subtle shadow stripe
+    ctx.fillStyle = bambooShadow;
+    ctx.fillRect(o.x+28, 0, 4, o.top);
+
+    // bottom shaft
+    ctx.fillStyle = bambooMain;
+    ctx.beginPath();
+    ctx.roundRect(o.x, o.top+o.gap, 40, bottomHeight, 10);
+    ctx.fill();
+
+    ctx.strokeStyle = ringColor;
+    for(let y=o.top+o.gap+20; y<H; y+=22){
+      ctx.beginPath();
+      ctx.moveTo(o.x+5, y);
+      ctx.lineTo(o.x+35, y+1);
+      ctx.stroke();
+    }
+    ctx.fillStyle = bambooShadow;
+    ctx.fillRect(o.x+28, o.top+o.gap, 4, bottomHeight);
+
+    ctx.restore();
+  });
+
+  // carrots (bigger, inverted triangle body)
+  carrots.forEach(c=>{
+    ctx.save();
+    ctx.translate(c.x, c.y);
+
+    // leaf (small)
+    ctx.fillStyle = "#70c96a";
+    ctx.beginPath();
+    ctx.moveTo(0, -14);
+    ctx.lineTo(-4, -6);
+    ctx.lineTo(4, -6);
+    ctx.closePath();
+    ctx.fill();
+
+    // body – single inverted triangle
+    ctx.fillStyle = c.golden ? "#ffd94a" : "#ff9d3b";
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(-7, 12);
+    ctx.lineTo(7, 12);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  });
+
+  // hop puffs (small subtle steam)
+  ctx.save();
+  hopPuffs.forEach(p=>{
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = "#f5f7ff";
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.radius*1.2, p.radius*0.6, 0, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.restore();
+
+  // player
+  if(kokkyLoaded){
+    const size = 64;
+    ctx.drawImage(kokkyImg, player.x - size/2, player.y - size/2, size, size);
+  }else{
+    ctx.fillStyle="#fff";
+    ctx.beginPath();
+    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // rank popup
+  if(rankPopupTimer > 0){
+    const alpha = rankPopupTimer > 30 ? 1 : rankPopupTimer/30;
+    ctx.globalAlpha = alpha;
+    const boxW = 280;
+    const boxH = 70;
+    const bx = (W - boxW)/2;
+    const by = 100;
+
+    const rgrad = ctx.createLinearGradient(bx, by, bx+boxW, by+boxH);
+    rgrad.addColorStop(0, "#ffeb9c");
+    rgrad.addColorStop(1, "#f6c14d");
+    ctx.fillStyle = rgrad;
+    ctx.beginPath();
+    ctx.roundRect(bx,by,boxW,boxH,12);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#7a4b00";
+    ctx.font = "18px 'Handjet'";
+    ctx.textAlign = "center";
+    ctx.fillText("Rank Up!", W/2, by+30);
+
+    ctx.font = "16px 'Handjet'";
+    ctx.fillText(rankPopupTitle, W/2, by+50);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(bx+25, by+18, 2, 0, Math.PI*2);
+    ctx.arc(bx+boxW-25, by+22, 2, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    rankPopupTimer--;
+  }
+
+  ctx.restore();
+}
+
+// Main loop
+function loop(){
+  updateGame();
+  draw();
+  requestAnimationFrame(loop);
+}
+
 loop();
+
+// If no player selected yet, force overlay once
+if(!currentPlayerId){
+  openPlayerOverlay();
+}
