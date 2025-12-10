@@ -9,18 +9,17 @@ html, body {
 /* Main layout */
 
 body {
-  /* solid night-sky tone behind UI and around canvas */
-  background: #02040b;
+  background: #02040b; /* deep night blue */
   color: #f4f4ff;
   font-family: "Handjet", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   display: flex;
   flex-direction: column;
   align-items: center;
   min-height: 100vh;
-  overflow: hidden; /* avoid scroll on phones */
+  overflow: hidden;
 }
 
-/* Ensure all buttons/links use Handjet & bold */
+/* Make buttons/links Handjet as well */
 button, a {
   font-family: "Handjet", sans-serif;
   font-weight: 700;
@@ -85,8 +84,6 @@ button, a {
   font-weight: 700;
 }
 
-/* Hidden msg row */
-
 #msg {
   display: none;
 }
@@ -94,12 +91,12 @@ button, a {
 /* Canvas */
 
 #game {
-  background: transparent; /* we draw sky ourselves */
+  background: transparent;
   border-radius: 10px;
   box-shadow: 0 6px 26px rgba(0, 0, 0, 0.7);
   width: 100%;
   max-width: 480px;
-  height: auto; /* keep internal aspect ratio */
+  height: auto;
   display: block;
 }
 
@@ -113,12 +110,10 @@ button, a {
   justify-content: center;
   align-items: center;
   z-index: 50;
-  pointer-events: auto;
 }
 
 .hidden {
   display: none;
-  pointer-events: none;
 }
 
 #playerPanel {
