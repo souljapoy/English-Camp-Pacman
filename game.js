@@ -1,4 +1,10 @@
-// Kokky's Hot Spring Hop – polished: bamboo obstacles, bottom steam only, improved carrots & spacing
+// Kokky's Hot Spring Hop – improved:
+// - No mid white band
+// - Bamboo obstacles
+// - Carrot lantern glow (stronger for golden)
+// - Reduced gap after carrot waves
+// - Gentle snow that fades in steam
+// - Hop sound (hop1.mp3, medium volume)
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -20,7 +26,8 @@ const cancelPlayerBtn = document.getElementById("cancelPlayerBtn");
 const W = canvas.width;
 const H = canvas.height;
 
-// Team config
+// ------------ Player / team setup ------------
+
 const TEAM_CONFIG = {
   W: { label: "White", numbers: [5,8,9,18,19,22,28,29,30,34], alts: ["A","B"] },
   R: { label: "Red",   numbers: [1,4,6,7,11,13,20,21,27,31,40], alts: ["A","B"] },
@@ -29,7 +36,7 @@ const TEAM_CONFIG = {
   Guest: { label: "Guest", numbers: [0], alts: [] }
 };
 
-// Rank thresholds (by obstacles passed)
+// Rank thresholds (obstacles passed)
 const RANKS = [
   { threshold: 25,  title: "Steam Hopper" },
   { threshold: 50,  title: "Onsen Ace" },
@@ -40,7 +47,8 @@ const RANKS = [
   { threshold: 1000, title: "Onsen God" }
 ];
 
-// Game state
+// ------------ Game state ------------
+
 let running = false;
 let obstacles = [];
 let carrots = [];
@@ -52,7 +60,6 @@ let carrotPatternIndex = 0;
 
 let currentPlayerId = localStorage.getItem("onsen_player_id") || null;
 
-// Player physics
 let player = { x: 120, y: H/2, vy: 0, r: 24 };
 const gravity = 0.45;
 const hopPower = -8.8;
@@ -60,7 +67,7 @@ const gapSize = 180;
 let spawnTimer = 0;
 
 const baseSpeed = 3;
-const boostedSpeed = 3.8; // after 60 obstacles
+const boostedSpeed = 3.8;
 
 // Rank popup
 let nextRankIndex = 0;
@@ -70,12 +77,13 @@ let rankPopupTitle = "";
 // Screen shake
 let shakeTimer = 0;
 
-// Hop steam particles (small & subtle)
+// Steam hop puffs
 let hopPuffs = [];
 
-// Background elements
+// Stars + lanterns + snow
 let stars = [];
 let lanternPhase = 0;
+let snowflakes = [];
 
 // Kokky sprite
 const kokkyImg = new Image();
@@ -83,17 +91,29 @@ kokkyImg.src = "kokky.png";
 let kokkyLoaded = false;
 kokkyImg.onload = () => { kokkyLoaded = true; };
 
-// Init UI
+// Hop sound (medium volume)
+let hopSound;
+try {
+  hopSound = new Audio("hop1.mp3");
+  hopSound.volume = 0.5; // medium
+} catch (e) {
+  hopSound = null;
+}
+
+// ------------ Init UI ------------
+
 updatePlayerLabel();
 updateBestFromLeaderboard();
 initStars();
+initSnow();
 
-// Controls
-window.addEventListener("keydown", e=>{
-  if(e.code === "Space"){
-    if(!running){
+// ------------ Controls ------------
+
+window.addEventListener("keydown", e => {
+  if (e.code === "Space") {
+    if (!running) {
       startGame();
-    }else{
+    } else {
       hop();
     }
     e.preventDefault();
@@ -101,9 +121,9 @@ window.addEventListener("keydown", e=>{
 });
 
 canvas.addEventListener("pointerdown", () => {
-  if(!running){
+  if (!running) {
     startGame();
-  }else{
+  } else {
     hop();
   }
 });
@@ -116,7 +136,8 @@ cancelPlayerBtn.addEventListener("click", () => {
   closePlayerOverlay(false);
 });
 
-// Player overlay logic
+// ------------ Player overlay logic ------------
+
 let selectedTeamKey = null;
 let selectedNumberCode = null;
 
@@ -126,29 +147,31 @@ function openPlayerOverlay() {
   confirmPlayerBtn.disabled = true;
   selectedPreview.textContent = "Player: -";
   numberList.innerHTML = '<p class="hint">Select a team first.</p>';
-  Array.from(document.querySelectorAll(".teamBtn")).forEach(btn=>{
+
+  Array.from(document.querySelectorAll(".teamBtn")).forEach(btn => {
     btn.classList.remove("selected");
   });
+
   playerOverlay.classList.remove("hidden");
 }
 
 function closePlayerOverlay(committed) {
   playerOverlay.classList.add("hidden");
-  if(!committed && !currentPlayerId){
+  if (!committed && !currentPlayerId) {
     setTimeout(openPlayerOverlay, 10);
   }
 }
 
-teamButtonsContainer.addEventListener("click", e=>{
+teamButtonsContainer.addEventListener("click", e => {
   const btn = e.target.closest(".teamBtn");
-  if(!btn) return;
+  if (!btn) return;
   const teamKey = btn.dataset.team;
   selectedTeamKey = teamKey;
   selectedNumberCode = null;
   confirmPlayerBtn.disabled = true;
   selectedPreview.textContent = "Player: -";
 
-  Array.from(teamButtonsContainer.querySelectorAll(".teamBtn")).forEach(b=>{
+  Array.from(teamButtonsContainer.querySelectorAll(".teamBtn")).forEach(b => {
     b.classList.toggle("selected", b === btn);
   });
 
@@ -158,38 +181,34 @@ teamButtonsContainer.addEventListener("click", e=>{
 function buildNumberList(teamKey) {
   const cfg = TEAM_CONFIG[teamKey];
   numberList.innerHTML = "";
-  if(!cfg){
+  if (!cfg) {
     numberList.innerHTML = '<p class="hint">Unknown team.</p>';
     return;
   }
 
-  if(teamKey === "Guest") {
+  if (teamKey === "Guest") {
     const btn = document.createElement("button");
     btn.textContent = "0 – Guest";
     btn.dataset.code = "0";
-    btn.addEventListener("click", ()=>selectNumberCode("0", btn));
+    btn.addEventListener("click", () => selectNumberCode("0", btn));
     numberList.appendChild(btn);
     return;
   }
 
-  const allCodes = [...cfg.numbers.map(n=>String(n)), ...cfg.alts];
+  const allCodes = [...cfg.numbers.map(n => String(n)), ...cfg.alts];
 
   allCodes.forEach(code => {
     const btn = document.createElement("button");
-    if(code === "A" || code === "B"){
-      btn.textContent = `${code} (ALT)`;
-    }else{
-      btn.textContent = code;
-    }
+    btn.textContent = (code === "A" || code === "B") ? `${code} (ALT)` : code;
     btn.dataset.code = code;
-    btn.addEventListener("click", ()=>selectNumberCode(code, btn));
+    btn.addEventListener("click", () => selectNumberCode(code, btn));
     numberList.appendChild(btn);
   });
 }
 
 function selectNumberCode(code, btn) {
   selectedNumberCode = code;
-  Array.from(numberList.querySelectorAll("button")).forEach(b=>{
+  Array.from(numberList.querySelectorAll("button")).forEach(b => {
     b.classList.remove("selected");
   });
   btn.classList.add("selected");
@@ -197,16 +216,16 @@ function selectNumberCode(code, btn) {
 }
 
 function updatePreviewAndButton() {
-  if(!selectedTeamKey || !selectedNumberCode){
+  if (!selectedTeamKey || !selectedNumberCode) {
     confirmPlayerBtn.disabled = true;
     selectedPreview.textContent = "Player: -";
     return;
   }
 
   let idStr;
-  if(selectedTeamKey === "Guest"){
+  if (selectedTeamKey === "Guest") {
     idStr = "0";
-  }else{
+  } else {
     idStr = `${selectedTeamKey}-${selectedNumberCode}`;
   }
   selectedPreview.textContent = `Player: ${idStr}`;
@@ -214,13 +233,12 @@ function updatePreviewAndButton() {
 }
 
 confirmPlayerBtn.addEventListener("click", () => {
-  if(!selectedTeamKey || !selectedNumberCode){
-    return;
-  }
+  if (!selectedTeamKey || !selectedNumberCode) return;
+
   let idStr;
-  if(selectedTeamKey === "Guest"){
+  if (selectedTeamKey === "Guest") {
     idStr = "0";
-  }else{
+  } else {
     idStr = `${selectedTeamKey}-${selectedNumberCode}`;
   }
   currentPlayerId = idStr;
@@ -230,65 +248,74 @@ confirmPlayerBtn.addEventListener("click", () => {
   closePlayerOverlay(true);
 });
 
-// Helpers
+// ------------ Helpers ------------
+
 function updatePlayerLabel() {
-  if(!currentPlayerId){
-    playerIdLabel.textContent = "Not set";
-  }else{
-    playerIdLabel.textContent = currentPlayerId;
-  }
+  playerIdLabel.textContent = currentPlayerId ? currentPlayerId : "Not set";
 }
 
-function loadBoard(){
-  try{
+function loadBoard() {
+  try {
     const raw = localStorage.getItem("onsen_lb");
-    if(!raw) return [];
+    if (!raw) return [];
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr : [];
-  }catch(e){
+  } catch {
     return [];
   }
 }
 
-function saveBoard(list){
+function saveBoard(list) {
   localStorage.setItem("onsen_lb", JSON.stringify(list));
 }
 
-function updateBestFromLeaderboard(){
-  if(!currentPlayerId){
+function updateBestFromLeaderboard() {
+  if (!currentPlayerId) {
     bestEl.textContent = "0";
     return;
   }
   const list = loadBoard();
-  const entry = list.find(e=>e.id === currentPlayerId);
-  const best = entry ? entry.score : 0;
-  bestEl.textContent = best;
+  const entry = list.find(e => e.id === currentPlayerId);
+  bestEl.textContent = entry ? entry.score : 0;
 }
 
-function getRankIndexForObstacles(count){
+function getRankIndexForObstacles(count) {
   let idx = -1;
-  for(let i=0; i<RANKS.length; i++){
-    if(count >= RANKS[i].threshold) idx = i;
+  for (let i = 0; i < RANKS.length; i++) {
+    if (count >= RANKS[i].threshold) idx = i;
   }
   return idx;
 }
 
-// Background init
-function initStars(){
+function initStars() {
   stars = [];
-  for(let i=0;i<60;i++){
+  for (let i = 0; i < 60; i++) {
     stars.push({
-      x: Math.random()*W,
-      y: Math.random()*H*0.5,
-      phase: Math.random()*Math.PI*2,
-      warm: Math.random() < 0.3 // 30% yellowish
+      x: Math.random() * W,
+      y: Math.random() * H * 0.5,
+      phase: Math.random() * Math.PI * 2,
+      warm: Math.random() < 0.3
     });
   }
 }
 
-// Game control
+function initSnow() {
+  snowflakes = [];
+  for (let i = 0; i < 40; i++) {
+    snowflakes.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vy: 0.4 + Math.random() * 0.6,
+      size: 1 + Math.random() * 2,
+      alpha: 0.3 + Math.random() * 0.3
+    });
+  }
+}
+
+// ------------ Game control ------------
+
 function startGame() {
-  if(!currentPlayerId){
+  if (!currentPlayerId) {
     openPlayerOverlay();
     return;
   }
@@ -306,32 +333,42 @@ function startGame() {
   obstacles = [];
   carrots = [];
   hopPuffs = [];
-  player.y = H/2;
+  player.y = H / 2;
   player.vy = 0;
   spawnTimer = 0;
 }
 
 function hop() {
-  if(!running) return;
+  if (!running) return;
   player.vy = hopPower;
 
-  // small, subtle hop steam
+  // hop steam puff (small & subtle)
   hopPuffs.push({
     x: player.x,
-    y: player.y + player.r,
+    y: player.y + player.r * 0.6,
     radius: 6,
     alpha: 0.35
   });
+
+  if (hopSound) {
+    try {
+      hopSound.currentTime = 0;
+      hopSound.play();
+    } catch {
+      // ignore autoplay errors
+    }
+  }
 }
 
-// Spawning
-function addObstacle(){
+// ------------ Spawning ------------
+
+function addObstacle() {
   const minCenter = 120;
-  const maxCenter = H - 120;
-  const baseCenter = minCenter + Math.random()*(maxCenter - minCenter);
+  const maxCenter = H - 140;
+  const baseCenter = minCenter + Math.random() * (maxCenter - minCenter);
   const mix = 0.7 * baseCenter + 0.3 * player.y;
   const center = Math.max(minCenter, Math.min(maxCenter, mix));
-  const top = center - gapSize/2;
+  const top = center - gapSize / 2;
 
   obstacles.push({
     x: W + 40,
@@ -341,41 +378,35 @@ function addObstacle(){
   });
 }
 
-// Carrot wave: 10 carrots, random pattern order; normal = 1pt, golden = 5pts
+// carrot wave: 10 carrots, 1 golden, random pattern
 function spawnCarrotWave() {
   carrotWaveCount++;
-  const goldenIndex = Math.floor(Math.random()*10); // one golden per wave
-
+  const goldenIndex = Math.floor(Math.random() * 10);
   const pattern = carrotPatternIndex % 5;
   carrotPatternIndex++;
 
   const baseX = W + 60;
   const stepX = 24;
-  const baseY = H/2;
+  const baseY = H / 2;
 
-  for(let i=0;i<10;i++){
+  for (let i = 0; i < 10; i++) {
     let offsetY = 0;
-    if(pattern === 0){
-      // U-shape
+    if (pattern === 0) {
       const center = 4.5;
       const d = i - center;
-      offsetY = d*d * 3;
-    }else if(pattern === 1){
-      // rising diagonal ↗
-      offsetY = -30 + i*6;
-    }else if(pattern === 2){
-      // falling diagonal ↘
-      offsetY = 30 - i*6;
-    }else if(pattern === 3){
-      // flat mid-line
+      offsetY = d * d * 3;
+    } else if (pattern === 1) {
+      offsetY = -30 + i * 6;
+    } else if (pattern === 2) {
+      offsetY = 30 - i * 6;
+    } else if (pattern === 3) {
       offsetY = -10;
-    }else if(pattern === 4){
-      // sine wave
+    } else if (pattern === 4) {
       offsetY = Math.sin(i * 0.8) * 25;
     }
 
     carrots.push({
-      x: baseX + i*stepX,
+      x: baseX + i * stepX,
       y: baseY + offsetY,
       r: 14,
       golden: (i === goldenIndex)
@@ -383,44 +414,47 @@ function spawnCarrotWave() {
   }
 }
 
-// Collision
-function collideObstacle(o){
-  if(player.x + player.r > o.x && player.x - player.r < o.x + 40){
-    if(player.y - player.r < o.top || player.y + player.r > o.top + o.gap){
+// ------------ Collision helpers ------------
+
+function collideObstacle(o) {
+  if (player.x + player.r > o.x && player.x - player.r < o.x + 40) {
+    if (player.y - player.r < o.top || player.y + player.r > o.top + o.gap) {
       return true;
     }
   }
   return false;
 }
 
-function collideCarrot(c){
+function collideCarrot(c) {
   const dx = player.x - c.x;
   const dy = player.y - c.y;
-  const dist = Math.sqrt(dx*dx + dy*dy);
+  const dist = Math.sqrt(dx * dx + dy * dy);
   return dist < (player.r + c.r);
 }
 
-// Game over
-function endGame(){
+// ------------ Game over ------------
+
+function endGame() {
   running = false;
   shakeTimer = 12;
 
-  if(!currentPlayerId || score <= 0){
+  if (!currentPlayerId || score <= 0) {
     msgEl.textContent = `Score: ${score}`;
     return;
   }
 
   const runRankIndex = getRankIndexForObstacles(obstaclesPassed);
-
   let list = loadBoard();
-  let entry = list.find(e=>e.id === currentPlayerId);
+  let entry = list.find(e => e.id === currentPlayerId);
   const prevScore = entry ? entry.score : 0;
-  const prevRankIndex = entry && typeof entry.bestRankIndex === "number" ? entry.bestRankIndex : -1;
+  const prevRankIndex = entry && typeof entry.bestRankIndex === "number"
+    ? entry.bestRankIndex
+    : -1;
 
   const isBetterScore = score > prevScore;
-  const isBetterRank  = runRankIndex > prevRankIndex;
+  const isBetterRank = runRankIndex > prevRankIndex;
 
-  if(!entry){
+  if (!entry) {
     entry = {
       id: currentPlayerId,
       score: score,
@@ -428,83 +462,100 @@ function endGame(){
       bestRankIndex: runRankIndex
     };
     list.push(entry);
-  }else{
-    if(isBetterScore){
+  } else {
+    if (isBetterScore) {
       entry.score = score;
       entry.ts = Date.now();
     }
-    if(isBetterRank){
+    if (isBetterRank) {
       entry.bestRankIndex = runRankIndex;
-      if(!isBetterScore){
+      if (!isBetterScore) {
         entry.ts = Date.now();
       }
     }
   }
 
-  list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
-  if(list.length > 50) list = list.slice(0,50);
+  list.sort((a, b) => b.score - a.score || a.ts - b.ts);
+  if (list.length > 50) list = list.slice(0, 50);
   saveBoard(list);
 
-  if(isBetterScore){
+  if (isBetterScore) {
     msgEl.textContent = `New Best! ${score}`;
-  }else{
+  } else {
     msgEl.textContent = `Score: ${score} (Best: ${prevScore})`;
   }
 
   updateBestFromLeaderboard();
 }
 
-// Rank check
+// ------------ Rank up ------------
+
 function checkRankUp() {
-  if(nextRankIndex >= RANKS.length) return;
+  if (nextRankIndex >= RANKS.length) return;
   const nextRank = RANKS[nextRankIndex];
-  if(obstaclesPassed >= nextRank.threshold){
+  if (obstaclesPassed >= nextRank.threshold) {
     rankPopupTitle = nextRank.title;
     rankPopupTimer = 150;
     nextRankIndex++;
   }
 }
 
-// Update loop
-function updateGame(){
-  if(!running) return;
+// ------------ Update loop ------------
+
+function updateGame() {
+  if (!running) return;
 
   // physics
   player.vy += gravity;
   player.y += player.vy;
 
-  if(player.y + player.r > H || player.y - player.r < 0){
+  if (player.y + player.r > H || player.y - player.r < 0) {
     endGame();
     return;
   }
 
   const speed = obstaclesPassed >= 60 ? boostedSpeed : baseSpeed;
 
-  // Spawn obstacles – allow spawn unless carrots still too far right
-  let canSpawnObstacle = true;
-  if(carrots.length > 0){
-    let maxCarrotX = -Infinity;
-    for(const c of carrots){
-      if(c.x > maxCarrotX) maxCarrotX = c.x;
+  // gentle snow
+  snowflakes.forEach(s => {
+    s.y += s.vy;
+    if (s.y > H * 0.85) {
+      s.alpha -= 0.02; // melt near steam
     }
-    // 0.5-ish spacing before next obstacle
-    if(maxCarrotX > W*0.5){
+    if (s.y > H || s.alpha <= 0) {
+      s.x = Math.random() * W;
+      s.y = -10;
+      s.vy = 0.4 + Math.random() * 0.6;
+      s.size = 1 + Math.random() * 2;
+      s.alpha = 0.3 + Math.random() * 0.3;
+    }
+  });
+
+  // obstacle spawn – keep a shorter gap after carrot waves
+  let canSpawnObstacle = true;
+  if (carrots.length > 0) {
+    let maxCarrotX = -Infinity;
+    for (const c of carrots) {
+      if (c.x > maxCarrotX) maxCarrotX = c.x;
+    }
+    // slightly closer than before → reduces big empty gap
+    if (maxCarrotX > W * 0.3) {
       canSpawnObstacle = false;
     }
   }
 
-  if(canSpawnObstacle){
+  if (canSpawnObstacle) {
     spawnTimer++;
-    if(spawnTimer > 85){
+    if (spawnTimer > 85) {
       spawnTimer = 0;
       addObstacle();
     }
   }
 
-  // Obstacles movement / scoring
-  obstacles.forEach(o=>{
+  // obstacle motion & scoring
+  obstacles.forEach(o => {
     o.x -= speed;
-    if(!o.passed && o.x + 40 < player.x){
+    if (!o.passed && o.x + 40 < player.x) {
       o.passed = true;
       obstaclesPassed++;
       score++;
@@ -512,29 +563,29 @@ function updateGame(){
 
       checkRankUp();
 
-      // carrot wave every 10 obstacles
-      if(obstaclesPassed % 10 === 0 && obstaclesPassed !== lastCarrotWaveObstacleCount){
+      if (obstaclesPassed % 10 === 0 &&
+          obstaclesPassed !== lastCarrotWaveObstacleCount) {
         lastCarrotWaveObstacleCount = obstaclesPassed;
         spawnCarrotWave();
       }
     }
   });
 
-  obstacles = obstacles.filter(o=>o.x > -60);
+  obstacles = obstacles.filter(o => o.x > -60);
 
-  for(const o of obstacles){
-    if(collideObstacle(o)){
+  for (const o of obstacles) {
+    if (collideObstacle(o)) {
       endGame();
       return;
     }
   }
 
-  // carrots movement / collecting
-  carrots.forEach(c=>{
+  // carrots
+  carrots.forEach(c => {
     c.x -= speed;
   });
-  carrots = carrots.filter(c=>{
-    if(collideCarrot(c)){
+  carrots = carrots.filter(c => {
+    if (collideCarrot(c)) {
       score += c.golden ? 5 : 1;
       scoreEl.textContent = score;
       return false;
@@ -542,41 +593,42 @@ function updateGame(){
     return c.x > -30;
   });
 
-  // hop steam puffs update (small & subtle)
-  hopPuffs.forEach(p=>{
+  // hop puffs
+  hopPuffs.forEach(p => {
     p.y -= 0.6;
     p.radius += 0.3;
     p.alpha -= 0.03;
   });
-  hopPuffs = hopPuffs.filter(p=>p.alpha > 0);
+  hopPuffs = hopPuffs.filter(p => p.alpha > 0);
 
   // background animation
   lanternPhase += 0.02;
 }
 
-// Draw
-function draw(){
+// ------------ Draw ------------
+
+function draw() {
   ctx.save();
 
-  if(shakeTimer > 0){
-    const dx = (Math.random()*4 - 2);
-    const dy = (Math.random()*4 - 2);
+  if (shakeTimer > 0) {
+    const dx = (Math.random() * 4 - 2);
+    const dy = (Math.random() * 4 - 2);
     ctx.translate(dx, dy);
     shakeTimer--;
   }
 
-  // retro midnight sky inside canvas
-  const grad = ctx.createLinearGradient(0,0,0,H);
+  // deep midnight sky
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, "#0a1633");
   grad.addColorStop(1, "#02040b");
   ctx.fillStyle = grad;
-  ctx.fillRect(0,0,W,H);
+  ctx.fillRect(0, 0, W, H);
 
   // stars
   ctx.save();
-  stars.forEach(s=>{
-    const tw = 0.5 + 0.5*Math.sin(performance.now()/400 + s.phase);
-    ctx.globalAlpha = 0.25 + 0.5*tw;
+  stars.forEach(s => {
+    const tw = 0.5 + 0.5 * Math.sin(performance.now() / 400 + s.phase);
+    ctx.globalAlpha = 0.25 + 0.5 * tw;
     ctx.fillStyle = s.warm ? "#f6e69c" : "#e8f0ff";
     ctx.fillRect(s.x, s.y, 2, 2);
   });
@@ -588,128 +640,145 @@ function draw(){
   const moonY = 80;
   const moonR = 26;
   const moonGrad = ctx.createRadialGradient(
-    moonX-8, moonY-8, 4,
-    moonX, moonY, moonR+6
+    moonX - 8, moonY - 8, 4,
+    moonX, moonY, moonR + 6
   );
   moonGrad.addColorStop(0, "#fff9d9");
   moonGrad.addColorStop(1, "#bba86a");
   ctx.fillStyle = moonGrad;
   ctx.beginPath();
-  ctx.arc(moonX, moonY, moonR, 0, Math.PI*2);
+  ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.globalAlpha = 0.25;
   ctx.fillStyle = "#d8c78a";
   ctx.beginPath();
-  ctx.arc(moonX-8, moonY-6, 6, 0, Math.PI*2);
-  ctx.arc(moonX+5, moonY+4, 4, 0, Math.PI*2);
-  ctx.arc(moonX+10, moonY-10, 3, 0, Math.PI*2);
+  ctx.arc(moonX - 8, moonY - 6, 6, 0, Math.PI * 2);
+  ctx.arc(moonX + 5, moonY + 4, 4, 0, Math.PI * 2);
+  ctx.arc(moonX + 10, moonY - 10, 3, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  // smooth snowy Nagano mountains (M1)
+  // darker mountains (no bright middle band)
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(0, H*0.58);
-  ctx.quadraticCurveTo(W*0.15, H*0.42, W*0.3, H*0.58);
-  ctx.quadraticCurveTo(W*0.5, H*0.38, W*0.7, H*0.58);
-  ctx.quadraticCurveTo(W*0.85, H*0.45, W, H*0.58);
+  ctx.moveTo(0, H * 0.6);
+  ctx.quadraticCurveTo(W * 0.15, H * 0.45, W * 0.3, H * 0.6);
+  ctx.quadraticCurveTo(W * 0.5, H * 0.40, W * 0.7, H * 0.6);
+  ctx.quadraticCurveTo(W * 0.85, H * 0.47, W, H * 0.6);
   ctx.lineTo(W, H);
   ctx.lineTo(0, H);
   ctx.closePath();
-  ctx.fillStyle = "#090f24";
+  ctx.fillStyle = "#050916";
   ctx.fill();
-
-  // snow caps band (very soft, not thick line)
-  const snowGrad = ctx.createLinearGradient(0, H*0.40, 0, H*0.58);
-  snowGrad.addColorStop(0, "rgba(229,236,255,0.6)");
-  snowGrad.addColorStop(1, "rgba(229,236,255,0)");
-  ctx.fillStyle = snowGrad;
-  ctx.fillRect(0, H*0.40, W, H*0.18);
   ctx.restore();
 
-  // lantern runway BEHIND obstacles
+  // snow (behind everything)
   ctx.save();
-  const lanternY = H*0.7;
-  for(let x = -20; x < W+40; x += 100){
-    const phase = lanternPhase + x*0.05;
-    const glow = 0.7 + 0.3*Math.sin(phase);
-    ctx.globalAlpha = 0.5 + 0.3*glow;
+  snowflakes.forEach(s => {
+    ctx.globalAlpha = s.alpha;
+    ctx.fillStyle = "#e6f0ff";
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
 
-    // lantern body
+  // lantern runway behind obstacles
+  ctx.save();
+  const lanternY = H * 0.72;
+  for (let x = -20; x < W + 40; x += 100) {
+    const phase = lanternPhase + x * 0.05;
+    const glow = 0.7 + 0.3 * Math.sin(phase);
+    ctx.globalAlpha = 0.5 + 0.3 * glow;
+
     ctx.fillStyle = "#ffcf6b";
-    ctx.fillRect(x-4, lanternY-7, 8, 12);
-    // caps
+    ctx.fillRect(x - 4, lanternY - 7, 8, 12);
     ctx.fillStyle = "#b8762a";
-    ctx.fillRect(x-5, lanternY-8, 10, 2);
-    ctx.fillRect(x-5, lanternY+4, 10, 2);
+    ctx.fillRect(x - 5, lanternY - 8, 10, 2);
+    ctx.fillRect(x - 5, lanternY + 4, 10, 2);
   }
   ctx.restore();
 
-  // bottom onsen steam blanket (moved down)
+  // bottom onsen steam (covers lower portion)
   ctx.save();
-  const steamGrad = ctx.createLinearGradient(0, H*0.9, 0, H);
+  const steamGrad = ctx.createLinearGradient(0, H * 0.8, 0, H);
   steamGrad.addColorStop(0, "rgba(255,255,255,0)");
-  steamGrad.addColorStop(1, "rgba(255,255,255,0.4)");
+  steamGrad.addColorStop(1, "rgba(255,255,255,0.45)");
   ctx.fillStyle = steamGrad;
-  ctx.fillRect(0, H*0.85, W, H*0.15);
+  ctx.fillRect(0, H * 0.74, W, H * 0.26);
   ctx.restore();
 
-  // obstacles: dark muted bamboo (B2-ish)
-  obstacles.forEach(o=>{
+  // obstacles: dark bamboo
+  obstacles.forEach(o => {
     const bottomHeight = H - (o.top + o.gap);
-
     const bambooMain = "#223726";
     const bambooShadow = "#17251a";
     const ringColor = "rgba(0,0,0,0.35)";
 
     ctx.save();
-
-    // top shaft
+    // top
     ctx.fillStyle = bambooMain;
     ctx.beginPath();
     ctx.roundRect(o.x, 0, 40, o.top, 10);
     ctx.fill();
 
-    // segment rings
     ctx.strokeStyle = ringColor;
     ctx.lineWidth = 2;
-    for(let y=20; y<o.top; y+=22){
+    for (let y = 20; y < o.top; y += 22) {
       ctx.beginPath();
-      ctx.moveTo(o.x+5, y);
-      ctx.lineTo(o.x+35, y+1);
+      ctx.moveTo(o.x + 5, y);
+      ctx.lineTo(o.x + 35, y + 1);
       ctx.stroke();
     }
-
-    // subtle shadow stripe
     ctx.fillStyle = bambooShadow;
-    ctx.fillRect(o.x+28, 0, 4, o.top);
+    ctx.fillRect(o.x + 28, 0, 4, o.top);
 
-    // bottom shaft
+    // bottom
     ctx.fillStyle = bambooMain;
     ctx.beginPath();
-    ctx.roundRect(o.x, o.top+o.gap, 40, bottomHeight, 10);
+    ctx.roundRect(o.x, o.top + o.gap, 40, bottomHeight, 10);
     ctx.fill();
 
     ctx.strokeStyle = ringColor;
-    for(let y=o.top+o.gap+20; y<H; y+=22){
+    for (let y = o.top + o.gap + 20; y < H; y += 22) {
       ctx.beginPath();
-      ctx.moveTo(o.x+5, y);
-      ctx.lineTo(o.x+35, y+1);
+      ctx.moveTo(o.x + 5, y);
+      ctx.lineTo(o.x + 35, y + 1);
       ctx.stroke();
     }
     ctx.fillStyle = bambooShadow;
-    ctx.fillRect(o.x+28, o.top+o.gap, 4, bottomHeight);
+    ctx.fillRect(o.x + 28, o.top + o.gap, 4, bottomHeight);
 
     ctx.restore();
   });
 
-  // carrots (bigger, inverted triangle body)
-  carrots.forEach(c=>{
+  // carrots with lantern glow
+  carrots.forEach(c => {
     ctx.save();
     ctx.translate(c.x, c.y);
 
-    // leaf (small)
+    // glow
+    const glowRadius = c.golden ? 32 : 26;
+    const glowGrad = ctx.createRadialGradient(
+      0, 0, 0,
+      0, 0, glowRadius
+    );
+    if (c.golden) {
+      glowGrad.addColorStop(0, "rgba(255,230,140,0.7)");
+      glowGrad.addColorStop(1, "rgba(255,230,140,0)");
+    } else {
+      glowGrad.addColorStop(0, "rgba(255,180,120,0.4)");
+      glowGrad.addColorStop(1, "rgba(255,180,120,0)");
+    }
+    ctx.fillStyle = glowGrad;
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.arc(0, 0, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // leaf
     ctx.fillStyle = "#70c96a";
     ctx.beginPath();
     ctx.moveTo(0, -14);
@@ -730,43 +799,43 @@ function draw(){
     ctx.restore();
   });
 
-  // hop puffs (small subtle steam)
+  // hop puffs
   ctx.save();
-  hopPuffs.forEach(p=>{
+  hopPuffs.forEach(p => {
     ctx.globalAlpha = p.alpha;
     ctx.fillStyle = "#f5f7ff";
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y, p.radius*1.2, p.radius*0.6, 0, 0, Math.PI*2);
+    ctx.ellipse(p.x, p.y, p.radius * 1.2, p.radius * 0.6, 0, 0, Math.PI * 2);
     ctx.fill();
   });
   ctx.restore();
 
   // player
-  if(kokkyLoaded){
+  if (kokkyLoaded) {
     const size = 64;
-    ctx.drawImage(kokkyImg, player.x - size/2, player.y - size/2, size, size);
-  }else{
-    ctx.fillStyle="#fff";
+    ctx.drawImage(kokkyImg, player.x - size / 2, player.y - size / 2, size, size);
+  } else {
+    ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
     ctx.fill();
   }
 
   // rank popup
-  if(rankPopupTimer > 0){
-    const alpha = rankPopupTimer > 30 ? 1 : rankPopupTimer/30;
+  if (rankPopupTimer > 0) {
+    const alpha = rankPopupTimer > 30 ? 1 : rankPopupTimer / 30;
     ctx.globalAlpha = alpha;
     const boxW = 280;
     const boxH = 70;
-    const bx = (W - boxW)/2;
+    const bx = (W - boxW) / 2;
     const by = 100;
 
-    const rgrad = ctx.createLinearGradient(bx, by, bx+boxW, by+boxH);
+    const rgrad = ctx.createLinearGradient(bx, by, bx + boxW, by + boxH);
     rgrad.addColorStop(0, "#ffeb9c");
     rgrad.addColorStop(1, "#f6c14d");
     ctx.fillStyle = rgrad;
     ctx.beginPath();
-    ctx.roundRect(bx,by,boxW,boxH,12);
+    ctx.roundRect(bx, by, boxW, boxH, 12);
     ctx.fill();
 
     ctx.strokeStyle = "rgba(255,255,255,0.7)";
@@ -776,15 +845,15 @@ function draw(){
     ctx.fillStyle = "#7a4b00";
     ctx.font = "18px 'Handjet'";
     ctx.textAlign = "center";
-    ctx.fillText("Rank Up!", W/2, by+30);
+    ctx.fillText("Rank Up!", W / 2, by + 30);
 
     ctx.font = "16px 'Handjet'";
-    ctx.fillText(rankPopupTitle, W/2, by+50);
+    ctx.fillText(rankPopupTitle, W / 2, by + 50);
 
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.arc(bx+25, by+18, 2, 0, Math.PI*2);
-    ctx.arc(bx+boxW-25, by+22, 2, 0, Math.PI*2);
+    ctx.arc(bx + 25, by + 18, 2, 0, Math.PI * 2);
+    ctx.arc(bx + boxW - 25, by + 22, 2, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.globalAlpha = 1;
@@ -794,8 +863,9 @@ function draw(){
   ctx.restore();
 }
 
-// Main loop
-function loop(){
+// ------------ Main loop ------------
+
+function loop() {
   updateGame();
   draw();
   requestAnimationFrame(loop);
@@ -803,7 +873,6 @@ function loop(){
 
 loop();
 
-// If no player selected yet, force overlay once
-if(!currentPlayerId){
+if (!currentPlayerId) {
   openPlayerOverlay();
 }
