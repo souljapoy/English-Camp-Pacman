@@ -44,6 +44,7 @@ const RANKS = [
 let running = false;
 let obstacles = [];
 let carrots = [];
+let obstacleSpawnCount = 0;
 let score = 0;
 let obstaclesPassed = 0;
 let carrotWaveCount = 0;
@@ -75,6 +76,7 @@ let hopPuffs = [];
 
 // Background elements
 let stars = [];
+let snowflakes = [];
 let lanternPhase = 0;
 
 // Kokky sprite
@@ -83,10 +85,30 @@ kokkyImg.src = "kokky.png";
 let kokkyLoaded = false;
 kokkyImg.onload = () => { kokkyLoaded = true; };
 
+// Hop sound (soft steam puff)
+const hopSoundFiles = ["hop1.mp3", "hop2.mp3", "hop3.mp3"];
+const hopSounds = [];
+hopSoundFiles.forEach(src => {
+  const audio = new Audio(src);
+  audio.volume = 0.28; // soft, calm
+  hopSounds.push(audio);
+});
+
+function playHopSound(){
+  if(!hopSounds.length) return;
+  const idx = Math.floor(Math.random() * hopSounds.length);
+  const base = hopSounds[idx];
+  const s = base.cloneNode();
+  s.volume = base.volume;
+  s.playbackRate = 0.96 + Math.random()*0.08; // tiny pitch variation
+  s.play().catch(()=>{});
+}
+
 // Init UI
 updatePlayerLabel();
 updateBestFromLeaderboard();
 initStars();
+initSnow();
 
 // Controls
 window.addEventListener("keydown", e=>{
@@ -286,6 +308,21 @@ function initStars(){
   }
 }
 
+function initSnow(){
+  snowflakes = [];
+  const count = 70;
+  for(let i=0;i<count;i++){
+    snowflakes.push({
+      x: Math.random()*W,
+      y: Math.random()*H,
+      r: 1.2 + Math.random()*1.4,
+      vy: 0.4 + Math.random()*0.5,
+      drift: (Math.random()*0.3) - 0.15,
+      phase: Math.random()*Math.PI*2
+    });
+  }
+}
+
 // Game control
 function startGame() {
   if(!currentPlayerId){
@@ -294,6 +331,7 @@ function startGame() {
   }
   running = true;
   score = 0;
+  obstacleSpawnCount = 0;
   obstaclesPassed = 0;
   carrotWaveCount = 0;
   lastCarrotWaveObstacleCount = 0;
@@ -314,6 +352,7 @@ function startGame() {
 function hop() {
   if(!running) return;
   player.vy = hopPower;
+  playHopSound();
 
   // small, subtle hop steam
   hopPuffs.push({
@@ -333,11 +372,22 @@ function addObstacle(){
   const center = Math.max(minCenter, Math.min(maxCenter, mix));
   const top = center - gapSize/2;
 
+  obstacleSpawnCount++;
+  let style = "bamboo";
+  if(obstacleSpawnCount > 60){
+    style = "torii";
+  }else if(obstacleSpawnCount > 40){
+    style = "fenceLantern";
+  }else if(obstacleSpawnCount > 20){
+    style = "fence";
+  }
+
   obstacles.push({
     x: W + 40,
     top,
     gap: gapSize,
-    passed: false
+    passed: false,
+    style
   });
 }
 
@@ -378,7 +428,8 @@ function spawnCarrotWave() {
       x: baseX + i*stepX,
       y: baseY + offsetY,
       r: 14,
-      golden: (i === goldenIndex)
+      golden: (i === goldenIndex),
+      phase: Math.random()*Math.PI*2
     });
   }
 }
@@ -487,8 +538,8 @@ function updateGame(){
     for(const c of carrots){
       if(c.x > maxCarrotX) maxCarrotX = c.x;
     }
-    // 0.5-ish spacing before next obstacle
-    if(maxCarrotX > W*0.5){
+    // allow next obstacle once carrots have moved closer to left (approx 0.5 gap)
+    if(maxCarrotX > W*0.3){
       canSpawnObstacle = false;
     }
   }
@@ -512,298 +563,4 @@ function updateGame(){
 
       checkRankUp();
 
-      // carrot wave every 10 obstacles
-      if(obstaclesPassed % 10 === 0 && obstaclesPassed !== lastCarrotWaveObstacleCount){
-        lastCarrotWaveObstacleCount = obstaclesPassed;
-        spawnCarrotWave();
-      }
-    }
-  });
-
-  obstacles = obstacles.filter(o=>o.x > -60);
-
-  for(const o of obstacles){
-    if(collideObstacle(o)){
-      endGame();
-      return;
-    }
-  }
-
-  // carrots movement / collecting
-  carrots.forEach(c=>{
-    c.x -= speed;
-  });
-  carrots = carrots.filter(c=>{
-    if(collideCarrot(c)){
-      score += c.golden ? 5 : 1;
-      scoreEl.textContent = score;
-      return false;
-    }
-    return c.x > -30;
-  });
-
-  // hop steam puffs update (small & subtle)
-  hopPuffs.forEach(p=>{
-    p.y -= 0.6;
-    p.radius += 0.3;
-    p.alpha -= 0.03;
-  });
-  hopPuffs = hopPuffs.filter(p=>p.alpha > 0);
-
-  // background animation
-  lanternPhase += 0.02;
-}
-
-// Draw
-function draw(){
-  ctx.save();
-
-  if(shakeTimer > 0){
-    const dx = (Math.random()*4 - 2);
-    const dy = (Math.random()*4 - 2);
-    ctx.translate(dx, dy);
-    shakeTimer--;
-  }
-
-  // retro midnight sky inside canvas
-  const grad = ctx.createLinearGradient(0,0,0,H);
-  grad.addColorStop(0, "#0a1633");
-  grad.addColorStop(1, "#02040b");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0,0,W,H);
-
-  // stars
-  ctx.save();
-  stars.forEach(s=>{
-    const tw = 0.5 + 0.5*Math.sin(performance.now()/400 + s.phase);
-    ctx.globalAlpha = 0.25 + 0.5*tw;
-    ctx.fillStyle = s.warm ? "#f6e69c" : "#e8f0ff";
-    ctx.fillRect(s.x, s.y, 2, 2);
-  });
-  ctx.restore();
-
-  // moon
-  ctx.save();
-  const moonX = W - 80;
-  const moonY = 80;
-  const moonR = 26;
-  const moonGrad = ctx.createRadialGradient(
-    moonX-8, moonY-8, 4,
-    moonX, moonY, moonR+6
-  );
-  moonGrad.addColorStop(0, "#fff9d9");
-  moonGrad.addColorStop(1, "#bba86a");
-  ctx.fillStyle = moonGrad;
-  ctx.beginPath();
-  ctx.arc(moonX, moonY, moonR, 0, Math.PI*2);
-  ctx.fill();
-
-  ctx.globalAlpha = 0.25;
-  ctx.fillStyle = "#d8c78a";
-  ctx.beginPath();
-  ctx.arc(moonX-8, moonY-6, 6, 0, Math.PI*2);
-  ctx.arc(moonX+5, moonY+4, 4, 0, Math.PI*2);
-  ctx.arc(moonX+10, moonY-10, 3, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-
-  // smooth snowy Nagano mountains (M1)
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(0, H*0.58);
-  ctx.quadraticCurveTo(W*0.15, H*0.42, W*0.3, H*0.58);
-  ctx.quadraticCurveTo(W*0.5, H*0.38, W*0.7, H*0.58);
-  ctx.quadraticCurveTo(W*0.85, H*0.45, W, H*0.58);
-  ctx.lineTo(W, H);
-  ctx.lineTo(0, H);
-  ctx.closePath();
-  ctx.fillStyle = "#090f24";
-  ctx.fill();
-
-  // snow caps band (very soft, not thick line)
-  const snowGrad = ctx.createLinearGradient(0, H*0.40, 0, H*0.58);
-  snowGrad.addColorStop(0, "rgba(229,236,255,0.6)");
-  snowGrad.addColorStop(1, "rgba(229,236,255,0)");
-  ctx.fillStyle = snowGrad;
-  ctx.fillRect(0, H*0.40, W, H*0.18);
-  ctx.restore();
-
-  // lantern runway BEHIND obstacles
-  ctx.save();
-  const lanternY = H*0.7;
-  for(let x = -20; x < W+40; x += 100){
-    const phase = lanternPhase + x*0.05;
-    const glow = 0.7 + 0.3*Math.sin(phase);
-    ctx.globalAlpha = 0.5 + 0.3*glow;
-
-    // lantern body
-    ctx.fillStyle = "#ffcf6b";
-    ctx.fillRect(x-4, lanternY-7, 8, 12);
-    // caps
-    ctx.fillStyle = "#b8762a";
-    ctx.fillRect(x-5, lanternY-8, 10, 2);
-    ctx.fillRect(x-5, lanternY+4, 10, 2);
-  }
-  ctx.restore();
-
-  // bottom onsen steam blanket (moved down)
-  ctx.save();
-  const steamGrad = ctx.createLinearGradient(0, H*0.9, 0, H);
-  steamGrad.addColorStop(0, "rgba(255,255,255,0)");
-  steamGrad.addColorStop(1, "rgba(255,255,255,0.4)");
-  ctx.fillStyle = steamGrad;
-  ctx.fillRect(0, H*0.85, W, H*0.15);
-  ctx.restore();
-
-  // obstacles: dark muted bamboo (B2-ish)
-  obstacles.forEach(o=>{
-    const bottomHeight = H - (o.top + o.gap);
-
-    const bambooMain = "#223726";
-    const bambooShadow = "#17251a";
-    const ringColor = "rgba(0,0,0,0.35)";
-
-    ctx.save();
-
-    // top shaft
-    ctx.fillStyle = bambooMain;
-    ctx.beginPath();
-    ctx.roundRect(o.x, 0, 40, o.top, 10);
-    ctx.fill();
-
-    // segment rings
-    ctx.strokeStyle = ringColor;
-    ctx.lineWidth = 2;
-    for(let y=20; y<o.top; y+=22){
-      ctx.beginPath();
-      ctx.moveTo(o.x+5, y);
-      ctx.lineTo(o.x+35, y+1);
-      ctx.stroke();
-    }
-
-    // subtle shadow stripe
-    ctx.fillStyle = bambooShadow;
-    ctx.fillRect(o.x+28, 0, 4, o.top);
-
-    // bottom shaft
-    ctx.fillStyle = bambooMain;
-    ctx.beginPath();
-    ctx.roundRect(o.x, o.top+o.gap, 40, bottomHeight, 10);
-    ctx.fill();
-
-    ctx.strokeStyle = ringColor;
-    for(let y=o.top+o.gap+20; y<H; y+=22){
-      ctx.beginPath();
-      ctx.moveTo(o.x+5, y);
-      ctx.lineTo(o.x+35, y+1);
-      ctx.stroke();
-    }
-    ctx.fillStyle = bambooShadow;
-    ctx.fillRect(o.x+28, o.top+o.gap, 4, bottomHeight);
-
-    ctx.restore();
-  });
-
-  // carrots (bigger, inverted triangle body)
-  carrots.forEach(c=>{
-    ctx.save();
-    ctx.translate(c.x, c.y);
-
-    // leaf (small)
-    ctx.fillStyle = "#70c96a";
-    ctx.beginPath();
-    ctx.moveTo(0, -14);
-    ctx.lineTo(-4, -6);
-    ctx.lineTo(4, -6);
-    ctx.closePath();
-    ctx.fill();
-
-    // body – single inverted triangle
-    ctx.fillStyle = c.golden ? "#ffd94a" : "#ff9d3b";
-    ctx.beginPath();
-    ctx.moveTo(0, -6);
-    ctx.lineTo(-7, 12);
-    ctx.lineTo(7, 12);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-  });
-
-  // hop puffs (small subtle steam)
-  ctx.save();
-  hopPuffs.forEach(p=>{
-    ctx.globalAlpha = p.alpha;
-    ctx.fillStyle = "#f5f7ff";
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.y, p.radius*1.2, p.radius*0.6, 0, 0, Math.PI*2);
-    ctx.fill();
-  });
-  ctx.restore();
-
-  // player
-  if(kokkyLoaded){
-    const size = 64;
-    ctx.drawImage(kokkyImg, player.x - size/2, player.y - size/2, size, size);
-  }else{
-    ctx.fillStyle="#fff";
-    ctx.beginPath();
-    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
-    ctx.fill();
-  }
-
-  // rank popup
-  if(rankPopupTimer > 0){
-    const alpha = rankPopupTimer > 30 ? 1 : rankPopupTimer/30;
-    ctx.globalAlpha = alpha;
-    const boxW = 280;
-    const boxH = 70;
-    const bx = (W - boxW)/2;
-    const by = 100;
-
-    const rgrad = ctx.createLinearGradient(bx, by, bx+boxW, by+boxH);
-    rgrad.addColorStop(0, "#ffeb9c");
-    rgrad.addColorStop(1, "#f6c14d");
-    ctx.fillStyle = rgrad;
-    ctx.beginPath();
-    ctx.roundRect(bx,by,boxW,boxH,12);
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(255,255,255,0.7)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = "#7a4b00";
-    ctx.font = "18px 'Handjet'";
-    ctx.textAlign = "center";
-    ctx.fillText("Rank Up!", W/2, by+30);
-
-    ctx.font = "16px 'Handjet'";
-    ctx.fillText(rankPopupTitle, W/2, by+50);
-
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(bx+25, by+18, 2, 0, Math.PI*2);
-    ctx.arc(bx+boxW-25, by+22, 2, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.globalAlpha = 1;
-    rankPopupTimer--;
-  }
-
-  ctx.restore();
-}
-
-// Main loop
-function loop(){
-  updateGame();
-  draw();
-  requestAnimationFrame(loop);
-}
-
-loop();
-
-// If no player selected yet, force overlay once
-if(!currentPlayerId){
-  openPlayerOverlay();
-}
+      // car
