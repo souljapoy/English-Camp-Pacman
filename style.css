@@ -4,33 +4,22 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-}
-
-/* Main layout */
-
-body {
-  background: #02040b; /* deep night blue */
-  color: #f4f4ff;
-  font-family: "Handjet", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-height: 100vh;
   overflow: hidden;
 }
 
-/* Make buttons/links Handjet as well */
-button, a {
+body {
+  background: #02040b;
+  color: #ffffff;
   font-family: "Handjet", sans-serif;
-  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
-
-/* Row 1: Scoreboard + Player */
 
 #topBar {
   width: 100%;
   max-width: 520px;
-  padding: 6px 10px 2px;
+  padding: 6px 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -39,204 +28,59 @@ button, a {
 #scoreboardLink {
   text-decoration: none;
   background: #ffffff;
-  color: #050814;
+  color: #000;
   padding: 8px 14px;
   border-radius: 10px;
   font-size: 1rem;
-  min-height: 40px;
-  min-width: 120px;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 #playerBox {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-size: 1rem;
-}
-
-#playerIdLabel {
-  font-weight: 700;
 }
 
 #changePlayerBtn {
   background: #ff6b8b;
   border: none;
-  color: #150818;
-  padding: 5px 10px;
+  padding: 4px 10px;
   border-radius: 6px;
+  font-weight: bold;
   cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 700;
 }
-
-/* Row 2: Score | Best */
 
 #scoreRow {
-  width: 100%;
   max-width: 520px;
-  padding: 2px 10px 6px;
+  width: 100%;
   text-align: center;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
+  padding-bottom: 6px;
 }
-
-#msg {
-  display: none;
-}
-
-/* Canvas */
 
 #game {
-  background: transparent;
-  border-radius: 10px;
-  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.7);
   width: 100%;
   max-width: 480px;
   height: auto;
   display: block;
+  border-radius: 12px;
+  box-shadow: 0 4px 22px rgba(0,0,0,0.5);
 }
-
-/* Player selection overlay */
 
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0,0,0,0.6);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 50;
 }
 
-.hidden {
-  display: none;
-}
+.hidden { display: none; }
 
 #playerPanel {
   width: 90%;
   max-width: 420px;
   background: #15162a;
+  padding: 12px;
   border-radius: 16px;
-  padding: 12px 14px 10px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.8);
-}
-
-#playerPanel h2 {
-  margin: 0 0 6px;
-  text-align: center;
-  font-size: 1.3rem;
-  color: #ffd36b;
-}
-
-.section {
-  margin-top: 8px;
-}
-
-.sectionTitle {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: #c5ccff;
-}
-
-#teamButtons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.teamBtn {
-  flex: 1 1 calc(20% - 6px);
-  min-width: 70px;
-  background: #2a2c4a;
-  border: none;
-  color: #f4f4ff;
-  padding: 6px 4px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 0.95rem;
-}
-
-.teamBtn.selected {
-  background: #ff6b8b;
-  color: #150818;
-  font-weight: 700;
-}
-
-#numberList {
-  background: #0a0b1c;
-  border-radius: 10px;
-  padding: 6px;
-  max-height: 160px;
-  overflow-y: auto;
-  font-size: 0.95rem;
-}
-
-#numberList button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: #1c1e34;
-  border: none;
-  color: #f4f4ff;
-  padding: 5px 6px;
-  border-radius: 6px;
-  margin-bottom: 4px;
-  cursor: pointer;
-}
-
-#numberList button.selected {
-  background: #3f93ff;
-  color: #050814;
-  font-weight: 700;
-}
-
-#numberList .hint {
-  color: #9aa0d8;
-  margin: 0;
-}
-
-#selectedPreview {
-  font-size: 1rem;
-  margin-bottom: 6px;
-}
-
-.panelButtons {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.panelButtons button {
-  background: #ff6b8b;
-  border: none;
-  color: #150818;
-  padding: 6px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-/* Mobile tweaks */
-
-@media (max-width: 600px) {
-  #topBar {
-    padding: 4px 8px 2px;
-  }
-  #scoreboardLink {
-    font-size: 0.9rem;
-    padding: 6px 10px;
-    min-width: 110px;
-  }
-  #playerBox {
-    font-size: 0.9rem;
-  }
-  #scoreRow {
-    font-size: 0.95rem;
-  }
+  color: white;
 }
