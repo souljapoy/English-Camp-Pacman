@@ -1,10 +1,11 @@
-// Kokky's Hot Spring Hop – improved:
-// - No mid white band
-// - Bamboo obstacles
-// - Carrot lantern glow (stronger for golden)
-// - Reduced gap after carrot waves
-// - Gentle snow that fades in steam
+// Kokky's Hot Spring Hop – polished build
+// - Uses mountains.png as parallax background
+// - Uses wood.png as obstacle art
+// - Carrot waves every 10 obstacles (10 carrots, mixed heights)
+// - Fixed small gap (0.5-ish) before and after carrot waves
+// - Snow that melts into steam near bottom
 // - Hop sound (hop1.mp3, medium volume)
+// - Rank titles saved in leaderboard
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -47,6 +48,32 @@ const RANKS = [
   { threshold: 1000, title: "Onsen God" }
 ];
 
+// ------------ Assets ------------
+
+const kokkyImg = new Image();
+kokkyImg.src = "kokky.png";
+let kokkyLoaded = false;
+kokkyImg.onload = () => { kokkyLoaded = true; };
+
+const mountainsImg = new Image();
+mountainsImg.src = "mountains.png";
+let mountainsLoaded = false;
+mountainsImg.onload = () => { mountainsLoaded = true; };
+
+const woodImg = new Image();
+woodImg.src = "wood.png";
+let woodLoaded = false;
+woodImg.onload = () => { woodLoaded = true; };
+
+// Hop sound (medium volume)
+let hopSound;
+try {
+  hopSound = new Audio("hop1.mp3");
+  hopSound.volume = 0.5;
+} catch (e) {
+  hopSound = null;
+}
+
 // ------------ Game state ------------
 
 let running = false;
@@ -77,30 +104,21 @@ let rankPopupTitle = "";
 // Screen shake
 let shakeTimer = 0;
 
-// Steam hop puffs
+// Hop steam puffs
 let hopPuffs = [];
 
-// Stars + lanterns + snow
+// Stars + snow
 let stars = [];
-let lanternPhase = 0;
 let snowflakes = [];
 
-// Kokky sprite
-const kokkyImg = new Image();
-kokkyImg.src = "kokky.png";
-let kokkyLoaded = false;
-kokkyImg.onload = () => { kokkyLoaded = true; };
+// Mountains parallax
+let mountainsOffset = 0;
 
-// Hop sound (medium volume)
-let hopSound;
-try {
-  hopSound = new Audio("hop1.mp3");
-  hopSound.volume = 0.5; // medium
-} catch (e) {
-  hopSound = null;
-}
+// Carrot wave–linked obstacle spawn
+let needObstacleAfterWave = false;
+let obstacleAfterWaveX = 0;
 
-// ------------ Init UI ------------
+// ------------ Init UI / world ------------
 
 updatePlayerLabel();
 updateBestFromLeaderboard();
@@ -336,6 +354,7 @@ function startGame() {
   player.y = H / 2;
   player.vy = 0;
   spawnTimer = 0;
+  needObstacleAfterWave = false;
 }
 
 function hop() {
@@ -362,7 +381,7 @@ function hop() {
 
 // ------------ Spawning ------------
 
-function addObstacle() {
+function addObstacle(xOverride) {
   const minCenter = 120;
   const maxCenter = H - 140;
   const baseCenter = minCenter + Math.random() * (maxCenter - minCenter);
@@ -371,7 +390,7 @@ function addObstacle() {
   const top = center - gapSize / 2;
 
   obstacles.push({
-    x: W + 40,
+    x: (typeof xOverride === "number") ? xOverride : (W + 40),
     top,
     gap: gapSize,
     passed: false
@@ -389,6 +408,8 @@ function spawnCarrotWave() {
   const stepX = 24;
   const baseY = H / 2;
 
+  let lastX = baseX;
+
   for (let i = 0; i < 10; i++) {
     let offsetY = 0;
     if (pattern === 0) {
@@ -405,13 +426,19 @@ function spawnCarrotWave() {
       offsetY = Math.sin(i * 0.8) * 25;
     }
 
+    const cx = baseX + i * stepX;
     carrots.push({
-      x: baseX + i * stepX,
+      x: cx,
       y: baseY + offsetY,
       r: 14,
       golden: (i === goldenIndex)
     });
+    lastX = cx;
   }
+
+  // Force next obstacle to appear soon after wave
+  needObstacleAfterWave = true;
+  obstacleAfterWaveX = lastX + 80; // ~0.5 of usual spacing
 }
 
 // ------------ Collision helpers ------------
@@ -516,6 +543,10 @@ function updateGame() {
 
   const speed = obstaclesPassed >= 60 ? boostedSpeed : baseSpeed;
 
+  // parallax mountains
+  mountainsOffset -= speed * 0.25;
+  if (mountainsOffset <= -W) mountainsOffset += W;
+
   // gentle snow
   snowflakes.forEach(s => {
     s.y += s.vy;
@@ -531,22 +562,14 @@ function updateGame() {
     }
   });
 
-  // obstacle spawn – keep a shorter gap after carrot waves
-  let canSpawnObstacle = true;
-  if (carrots.length > 0) {
-    let maxCarrotX = -Infinity;
-    for (const c of carrots) {
-      if (c.x > maxCarrotX) maxCarrotX = c.x;
-    }
-    // slightly closer than before → reduces big empty gap
-    if (maxCarrotX > W * 0.3) {
-      canSpawnObstacle = false;
-    }
-  }
-
-  if (canSpawnObstacle) {
+  // obstacle spawn: check if we need one after carrot wave
+  if (needObstacleAfterWave) {
+    addObstacle(obstacleAfterWaveX);
+    needObstacleAfterWave = false;
+  } else {
     spawnTimer++;
-    if (spawnTimer > 85) {
+    const maxSpacing = 90; // base spacing
+    if (spawnTimer > maxSpacing) {
       spawnTimer = 0;
       addObstacle();
     }
@@ -601,8 +624,12 @@ function updateGame() {
   });
   hopPuffs = hopPuffs.filter(p => p.alpha > 0);
 
-  // background animation
-  lanternPhase += 0.02;
+  // background motion (stars twinkle via time inside draw)
+
+  // rank popup timer
+  if (rankPopupTimer > 0) {
+    rankPopupTimer--;
+  }
 }
 
 // ------------ Draw ------------
@@ -626,8 +653,9 @@ function draw() {
 
   // stars
   ctx.save();
+  const t = performance.now() / 400;
   stars.forEach(s => {
-    const tw = 0.5 + 0.5 * Math.sin(performance.now() / 400 + s.phase);
+    const tw = 0.5 + 0.5 * Math.sin(t + s.phase);
     ctx.globalAlpha = 0.25 + 0.5 * tw;
     ctx.fillStyle = s.warm ? "#f6e69c" : "#e8f0ff";
     ctx.fillRect(s.x, s.y, 2, 2);
@@ -659,21 +687,25 @@ function draw() {
   ctx.fill();
   ctx.restore();
 
-  // darker mountains (no bright middle band)
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(0, H * 0.6);
-  ctx.quadraticCurveTo(W * 0.15, H * 0.45, W * 0.3, H * 0.6);
-  ctx.quadraticCurveTo(W * 0.5, H * 0.40, W * 0.7, H * 0.6);
-  ctx.quadraticCurveTo(W * 0.85, H * 0.47, W, H * 0.6);
-  ctx.lineTo(W, H);
-  ctx.lineTo(0, H);
-  ctx.closePath();
-  ctx.fillStyle = "#050916";
-  ctx.fill();
-  ctx.restore();
+  // mountains layer
+  if (mountainsLoaded) {
+    const mh = 220;
+    const my = H * 0.45;
+    const scale = mh / mountainsImg.height;
+    const mw = mountainsImg.width * scale;
 
-  // snow (behind everything)
+    let x = mountainsOffset % mw;
+    if (x > 0) x -= mw;
+
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    for (; x < W; x += mw) {
+      ctx.drawImage(mountainsImg, x, my, mw, mh);
+    }
+    ctx.restore();
+  }
+
+  // snow (behind obstacles)
   ctx.save();
   snowflakes.forEach(s => {
     ctx.globalAlpha = s.alpha;
@@ -684,23 +716,7 @@ function draw() {
   });
   ctx.restore();
 
-  // lantern runway behind obstacles
-  ctx.save();
-  const lanternY = H * 0.72;
-  for (let x = -20; x < W + 40; x += 100) {
-    const phase = lanternPhase + x * 0.05;
-    const glow = 0.7 + 0.3 * Math.sin(phase);
-    ctx.globalAlpha = 0.5 + 0.3 * glow;
-
-    ctx.fillStyle = "#ffcf6b";
-    ctx.fillRect(x - 4, lanternY - 7, 8, 12);
-    ctx.fillStyle = "#b8762a";
-    ctx.fillRect(x - 5, lanternY - 8, 10, 2);
-    ctx.fillRect(x - 5, lanternY + 4, 10, 2);
-  }
-  ctx.restore();
-
-  // bottom onsen steam (covers lower portion)
+  // bottom onsen steam
   ctx.save();
   const steamGrad = ctx.createLinearGradient(0, H * 0.8, 0, H);
   steamGrad.addColorStop(0, "rgba(255,255,255,0)");
@@ -709,48 +725,20 @@ function draw() {
   ctx.fillRect(0, H * 0.74, W, H * 0.26);
   ctx.restore();
 
-  // obstacles: dark bamboo
+  // obstacles: wood planks
   obstacles.forEach(o => {
-    const bottomHeight = H - (o.top + o.gap);
-    const bambooMain = "#223726";
-    const bambooShadow = "#17251a";
-    const ringColor = "rgba(0,0,0,0.35)";
-
-    ctx.save();
-    // top
-    ctx.fillStyle = bambooMain;
-    ctx.beginPath();
-    ctx.roundRect(o.x, 0, 40, o.top, 10);
-    ctx.fill();
-
-    ctx.strokeStyle = ringColor;
-    ctx.lineWidth = 2;
-    for (let y = 20; y < o.top; y += 22) {
-      ctx.beginPath();
-      ctx.moveTo(o.x + 5, y);
-      ctx.lineTo(o.x + 35, y + 1);
-      ctx.stroke();
+    if (woodLoaded) {
+      const bottomHeight = H - (o.top + o.gap);
+      // top
+      ctx.drawImage(woodImg, o.x, 0, 40, o.top);
+      // bottom
+      ctx.drawImage(woodImg, o.x, o.top + o.gap, 40, bottomHeight);
+    } else {
+      // fallback rectangles
+      ctx.fillStyle = "#3A2A1A";
+      ctx.fillRect(o.x, 0, 40, o.top);
+      ctx.fillRect(o.x, o.top + o.gap, 40, H - (o.top + o.gap));
     }
-    ctx.fillStyle = bambooShadow;
-    ctx.fillRect(o.x + 28, 0, 4, o.top);
-
-    // bottom
-    ctx.fillStyle = bambooMain;
-    ctx.beginPath();
-    ctx.roundRect(o.x, o.top + o.gap, 40, bottomHeight, 10);
-    ctx.fill();
-
-    ctx.strokeStyle = ringColor;
-    for (let y = o.top + o.gap + 20; y < H; y += 22) {
-      ctx.beginPath();
-      ctx.moveTo(o.x + 5, y);
-      ctx.lineTo(o.x + 35, y + 1);
-      ctx.stroke();
-    }
-    ctx.fillStyle = bambooShadow;
-    ctx.fillRect(o.x + 28, o.top + o.gap, 4, bottomHeight);
-
-    ctx.restore();
   });
 
   // carrots with lantern glow
@@ -835,7 +823,11 @@ function draw() {
     rgrad.addColorStop(1, "#f6c14d");
     ctx.fillStyle = rgrad;
     ctx.beginPath();
-    ctx.roundRect(bx, by, boxW, boxH, 12);
+    if (ctx.roundRect) {
+      ctx.roundRect(bx, by, boxW, boxH, 12);
+    } else {
+      ctx.rect(bx, by, boxW, boxH);
+    }
     ctx.fill();
 
     ctx.strokeStyle = "rgba(255,255,255,0.7)";
@@ -857,7 +849,6 @@ function draw() {
     ctx.fill();
 
     ctx.globalAlpha = 1;
-    rankPopupTimer--;
   }
 
   ctx.restore();
