@@ -563,4 +563,445 @@ function updateGame(){
 
       checkRankUp();
 
-      // car
+      // carrot wave every 10 obstacles
+      if(obstaclesPassed % 10 === 0 && obstaclesPassed !== lastCarrotWaveObstacleCount){
+        lastCarrotWaveObstacleCount = obstaclesPassed;
+        spawnCarrotWave();
+      }
+    }
+  });
+
+  obstacles = obstacles.filter(o=>o.x > -60);
+
+  for(const o of obstacles){
+    if(collideObstacle(o)){
+      endGame();
+      return;
+    }
+  }
+
+  // carrots movement / collecting
+  carrots.forEach(c=>{
+    c.x -= speed;
+  });
+  carrots = carrots.filter(c=>{
+    if(collideCarrot(c)){
+      score += c.golden ? 5 : 1;
+      scoreEl.textContent = score;
+      return false;
+    }
+    return c.x > -30;
+  });
+
+  // hop steam puffs update (small & subtle)
+  hopPuffs.forEach(p=>{
+    p.y -= 0.6;
+    p.radius += 0.3;
+    p.alpha -= 0.03;
+  });
+  hopPuffs = hopPuffs.filter(p=>p.alpha > 0);
+
+  // snow update
+  snowflakes.forEach(f=>{
+    f.y += f.vy;
+    f.x += f.drift;
+    if(f.x < -10) f.x = W + 10;
+    if(f.x > W + 10) f.x = -10;
+    if(f.y > H){
+      f.y = -10;
+      f.x = Math.random()*W;
+    }
+  });
+
+  // background animation
+  lanternPhase += 0.02;
+}
+
+// Draw
+function draw(){
+  ctx.save();
+
+  if(shakeTimer > 0){
+    const dx = (Math.random()*4 - 2);
+    const dy = (Math.random()*4 - 2);
+    ctx.translate(dx, dy);
+    shakeTimer--;
+  }
+
+  // retro midnight sky inside canvas
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, "#0a1633");
+  grad.addColorStop(1, "#02040b");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // stars
+  ctx.save();
+  stars.forEach(s=>{
+    const tw = 0.5 + 0.5*Math.sin(performance.now()/400 + s.phase);
+    ctx.globalAlpha = 0.25 + 0.5*tw;
+    ctx.fillStyle = s.warm ? "#f6e69c" : "#e8f0ff";
+    ctx.fillRect(s.x, s.y, 2, 2);
+  });
+  ctx.restore();
+
+  // moon
+  ctx.save();
+  const moonX = W - 80;
+  const moonY = 80;
+  const moonR = 26;
+  const moonGrad = ctx.createRadialGradient(
+    moonX-8, moonY-8, 4,
+    moonX, moonY, moonR+6
+  );
+  moonGrad.addColorStop(0, "#fff9d9");
+  moonGrad.addColorStop(1, "#bba86a");
+  ctx.fillStyle = moonGrad;
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, moonR, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = "#d8c78a";
+  ctx.beginPath();
+  ctx.arc(moonX-8, moonY-6, 6, 0, Math.PI*2);
+  ctx.arc(moonX+5, moonY+4, 4, 0, Math.PI*2);
+  ctx.arc(moonX+10, moonY-10, 3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // smooth snowy Nagano mountains (M1)
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, H*0.58);
+  ctx.quadraticCurveTo(W*0.15, H*0.42, W*0.3, H*0.58);
+  ctx.quadraticCurveTo(W*0.5, H*0.38, W*0.7, H*0.58);
+  ctx.quadraticCurveTo(W*0.85, H*0.45, W, H*0.58);
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = "#090f24";
+  ctx.fill();
+
+  // snow caps band (very soft, not thick line)
+  const snowGrad = ctx.createLinearGradient(0, H*0.40, 0, H*0.58);
+  snowGrad.addColorStop(0, "rgba(229,236,255,0.6)");
+  snowGrad.addColorStop(1, "rgba(229,236,255,0)");
+  ctx.fillStyle = snowGrad;
+  ctx.fillRect(0, H*0.40, W, H*0.18);
+  ctx.restore();
+
+  // snowfall behind obstacles
+  ctx.save();
+  const steamStartY = H*0.92;
+  snowflakes.forEach(f=>{
+    let alpha = 0.6;
+    if(f.y > steamStartY){
+      const t = Math.min(1, (f.y - steamStartY)/(H - steamStartY));
+      alpha *= (1 - t);
+    }
+    if(alpha <= 0) return;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#f5f7ff";
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // lantern runway BEHIND obstacles
+  ctx.save();
+  const lanternY = H*0.7;
+  for(let x = -20; x < W+40; x += 100){
+    const phase = lanternPhase + x*0.05;
+    const glow = 0.7 + 0.3*Math.sin(phase);
+    ctx.globalAlpha = 0.5 + 0.3*glow;
+
+    // lantern body
+    ctx.fillStyle = "#ffcf6b";
+    ctx.fillRect(x-4, lanternY-7, 8, 12);
+    // caps
+    ctx.fillStyle = "#b8762a";
+    ctx.fillRect(x-5, lanternY-8, 10, 2);
+    ctx.fillRect(x-5, lanternY+4, 10, 2);
+  }
+  ctx.restore();
+
+  // bottom onsen steam blanket – cozy but only at the very bottom
+  ctx.save();
+  const steamStart = H*0.92;
+  const steamGrad = ctx.createLinearGradient(0, steamStart, 0, H);
+  steamGrad.addColorStop(0, "rgba(255,255,255,0)");
+  steamGrad.addColorStop(1, "rgba(255,255,255,0.45)");
+  ctx.fillStyle = steamGrad;
+  ctx.fillRect(0, steamStart, W, H - steamStart);
+  ctx.restore();
+
+  // obstacles: stage-based designs (bamboo → fence → fence+lanterns → torii)
+  obstacles.forEach(o=>{
+    const bottomHeight = H - (o.top + o.gap);
+    ctx.save();
+
+    if(o.style === "fence" || o.style === "fenceLantern"){
+      // wooden fence look
+      const woodMain = "#3a2b22";
+      const woodDark = "#241813";
+      const slatColor = "rgba(0,0,0,0.35)";
+
+      // top fence post
+      ctx.fillStyle = woodMain;
+      ctx.beginPath();
+      ctx.roundRect(o.x, 0, 40, o.top, 8);
+      ctx.fill();
+
+      // bottom fence post
+      ctx.beginPath();
+      ctx.roundRect(o.x, o.top+o.gap, 40, bottomHeight, 8);
+      ctx.fill();
+
+      // vertical shading
+      ctx.fillStyle = woodDark;
+      ctx.fillRect(o.x+26, 0, 4, o.top);
+      ctx.fillRect(o.x+26, o.top+o.gap, 4, bottomHeight);
+
+      // horizontal slats
+      ctx.strokeStyle = slatColor;
+      ctx.lineWidth = 2;
+      for(let y=18; y<o.top; y+=18){
+        ctx.beginPath();
+        ctx.moveTo(o.x+4, y);
+        ctx.lineTo(o.x+36, y);
+        ctx.stroke();
+      }
+      for(let y=o.top+o.gap+18; y<H; y+=18){
+        ctx.beginPath();
+        ctx.moveTo(o.x+4, y);
+        ctx.lineTo(o.x+36, y);
+        ctx.stroke();
+      }
+
+      // small lantern tags for fence+lantern style
+      if(o.style === "fenceLantern"){
+        const tagYTop = Math.max(20, o.top - 22);
+        const tagYBot = Math.min(H-30, o.top+o.gap + 6);
+        ctx.fillStyle = "#ffcf6b";
+        ctx.fillRect(o.x+12, tagYTop, 8, 12);
+        ctx.fillRect(o.x+20, tagYBot, 8, 12);
+        ctx.fillStyle = "#b8762a";
+        ctx.fillRect(o.x+11, tagYTop-1, 10, 2);
+        ctx.fillRect(o.x+11, tagYTop+12, 10, 2);
+        ctx.fillRect(o.x+19, tagYBot-1, 10, 2);
+        ctx.fillRect(o.x+19, tagYBot+12, 10, 2);
+      }
+
+    } else if(o.style === "torii"){
+      // deep vermilion torii pillars
+      const toriiMain = "#8e2520";
+      const toriiShadow = "#4b1412";
+
+      // top pillar
+      ctx.fillStyle = toriiMain;
+      ctx.beginPath();
+      ctx.roundRect(o.x, 0, 40, o.top, 10);
+      ctx.fill();
+
+      // bottom pillar
+      ctx.beginPath();
+      ctx.roundRect(o.x, o.top+o.gap, 40, bottomHeight, 10);
+      ctx.fill();
+
+      // inner shadow
+      ctx.fillStyle = toriiShadow;
+      ctx.fillRect(o.x+26, 0, 5, o.top);
+      ctx.fillRect(o.x+26, o.top+o.gap, 5, bottomHeight);
+
+      // decorative joints
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
+      ctx.lineWidth = 2;
+      for(let y=22; y<o.top; y+=24){
+        ctx.beginPath();
+        ctx.moveTo(o.x+6, y);
+        ctx.lineTo(o.x+34, y);
+        ctx.stroke();
+      }
+      for(let y=o.top+o.gap+22; y<H; y+=24){
+        ctx.beginPath();
+        ctx.moveTo(o.x+6, y);
+        ctx.lineTo(o.x+34, y);
+        ctx.stroke();
+      }
+
+    } else {
+      // default dark bamboo
+      const bambooMain = "#223726";
+      const bambooShadow = "#17251a";
+      const ringColor = "rgba(0,0,0,0.35)";
+
+      // top shaft
+      ctx.fillStyle = bambooMain;
+      ctx.beginPath();
+      ctx.roundRect(o.x, 0, 40, o.top, 10);
+      ctx.fill();
+
+      // segment rings
+      ctx.strokeStyle = ringColor;
+      ctx.lineWidth = 2;
+      for(let y=20; y<o.top; y+=22){
+        ctx.beginPath();
+        ctx.moveTo(o.x+5, y);
+        ctx.lineTo(o.x+35, y+1);
+        ctx.stroke();
+      }
+
+      // subtle shadow stripe
+      ctx.fillStyle = bambooShadow;
+      ctx.fillRect(o.x+28, 0, 4, o.top);
+
+      // bottom shaft
+      ctx.fillStyle = bambooMain;
+      ctx.beginPath();
+      ctx.roundRect(o.x, o.top+o.gap, 40, bottomHeight, 10);
+      ctx.fill();
+
+      for(let y=o.top+o.gap+20; y<H; y+=22){
+        ctx.beginPath();
+        ctx.moveTo(o.x+5, y);
+        ctx.lineTo(o.x+35, y+1);
+        ctx.stroke();
+      }
+      ctx.fillStyle = bambooShadow;
+      ctx.fillRect(o.x+28, o.top+o.gap, 4, bottomHeight);
+    }
+
+    ctx.restore();
+  });
+
+  // carrots with lantern glow
+  carrots.forEach(c=>{
+    ctx.save();
+    ctx.translate(c.x, c.y);
+
+    // soft lantern aura
+    const t = performance.now()/500 + (c.phase || 0);
+    const pulse = Math.sin(t);
+    let radius, innerAlpha;
+    if(c.golden){
+      radius = 24;
+      innerAlpha = 0.9 + 0.2*pulse;  // golden brighter
+    }else{
+      radius = 18;
+      innerAlpha = 0.6 + 0.2*pulse;
+    }
+
+    const glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+    if(c.golden){
+      glowGrad.addColorStop(0, `rgba(255, 242, 200, ${innerAlpha})`);
+      glowGrad.addColorStop(1, "rgba(255, 242, 200, 0)");
+    }else{
+      glowGrad.addColorStop(0, `rgba(255, 220, 170, ${innerAlpha})`);
+      glowGrad.addColorStop(1, "rgba(255, 220, 170, 0)");
+    }
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI*2);
+    ctx.fill();
+
+    // leaf (small)
+    ctx.fillStyle = "#70c96a";
+    ctx.beginPath();
+    ctx.moveTo(0, -14);
+    ctx.lineTo(-4, -6);
+    ctx.lineTo(4, -6);
+    ctx.closePath();
+    ctx.fill();
+
+    // body – single inverted triangle
+    ctx.fillStyle = c.golden ? "#ffd94a" : "#ff9d3b";
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(-7, 12);
+    ctx.lineTo(7, 12);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  });
+
+  // hop puffs (small subtle steam)
+  ctx.save();
+  hopPuffs.forEach(p=>{
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = "#f5f7ff";
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.radius*1.2, p.radius*0.6, 0, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.restore();
+
+  // player
+  if(kokkyLoaded){
+    const size = 64;
+    ctx.drawImage(kokkyImg, player.x - size/2, player.y - size/2, size, size);
+  }else{
+    ctx.fillStyle="#fff";
+    ctx.beginPath();
+    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // rank popup
+  if(rankPopupTimer > 0){
+    const alpha = rankPopupTimer > 30 ? 1 : rankPopupTimer/30;
+    ctx.globalAlpha = alpha;
+    const boxW = 280;
+    const boxH = 70;
+    const bx = (W - boxW)/2;
+    const by = 100;
+
+    const rgrad = ctx.createLinearGradient(bx, by, bx+boxW, by+boxH);
+    rgrad.addColorStop(0, "#ffeb9c");
+    rgrad.addColorStop(1, "#f6c14d");
+    ctx.fillStyle = rgrad;
+    ctx.beginPath();
+    ctx.roundRect(bx,by,boxW,boxH,12);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#7a4b00";
+    ctx.font = "18px 'Handjet'";
+    ctx.textAlign = "center";
+    ctx.fillText("Rank Up!", W/2, by+30);
+
+    ctx.font = "16px 'Handjet'";
+    ctx.fillText(rankPopupTitle, W/2, by+50);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(bx+25, by+18, 2, 0, Math.PI*2);
+    ctx.arc(bx+boxW-25, by+22, 2, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    rankPopupTimer--;
+  }
+
+  ctx.restore();
+}
+
+// Main loop
+function loop(){
+  updateGame();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+
+// If no player selected yet, force overlay once
+if(!currentPlayerId){
+  openPlayerOverlay();
+}
