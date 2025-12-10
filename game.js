@@ -1,4 +1,4 @@
-// Kokky's Onsen Dash – polished version: night onsen, wooden pillars, fog steam, carrot waves, scoreboard ranks
+// Kokky's Hot Spring Hop – polished: bamboo obstacles, bottom steam only, improved carrots & spacing
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -70,13 +70,12 @@ let rankPopupTitle = "";
 // Screen shake
 let shakeTimer = 0;
 
-// Hop steam particles
+// Hop steam particles (small & subtle)
 let hopPuffs = [];
 
 // Background elements
 let stars = [];
 let lanternPhase = 0;
-let steamWisps = [];
 
 // Kokky sprite
 const kokkyImg = new Image();
@@ -88,7 +87,6 @@ kokkyImg.onload = () => { kokkyLoaded = true; };
 updatePlayerLabel();
 updateBestFromLeaderboard();
 initStars();
-initSteamWisps();
 
 // Controls
 window.addEventListener("keydown", e=>{
@@ -288,18 +286,6 @@ function initStars(){
   }
 }
 
-function initSteamWisps(){
-  steamWisps = [];
-  for(let i=0;i<18;i++){
-    steamWisps.push({
-      x: Math.random()*W,
-      y: H - 40 - Math.random()*80,
-      speedY: 0.25 + Math.random()*0.25,
-      alpha: 0.25 + Math.random()*0.2
-    });
-  }
-}
-
 // Game control
 function startGame() {
   if(!currentPlayerId){
@@ -329,12 +315,12 @@ function hop() {
   if(!running) return;
   player.vy = hopPower;
 
-  // add hop steam puff (no more circles, soft ellipse fog)
+  // small, subtle hop steam
   hopPuffs.push({
     x: player.x,
     y: player.y + player.r,
-    radius: 10,
-    alpha: 0.5
+    radius: 6,
+    alpha: 0.35
   });
 }
 
@@ -355,26 +341,25 @@ function addObstacle(){
   });
 }
 
-// Carrot wave: 10 carrots, patterns rotate; normal = 1pt, golden = 5pts
+// Carrot wave: 10 carrots, random pattern order; normal = 1pt, golden = 5pts
 function spawnCarrotWave() {
   carrotWaveCount++;
-  const hasGolden = true; // always one golden
-  const goldenIndex = Math.floor(Math.random()*10);
+  const goldenIndex = Math.floor(Math.random()*10); // one golden per wave
 
   const pattern = carrotPatternIndex % 5;
   carrotPatternIndex++;
 
   const baseX = W + 60;
-  const stepX = 24; // tighter spacing
+  const stepX = 24;
   const baseY = H/2;
 
   for(let i=0;i<10;i++){
     let offsetY = 0;
     if(pattern === 0){
-      // U-shape (wider)
+      // U-shape
       const center = 4.5;
       const d = i - center;
-      offsetY = d*d * 3; 
+      offsetY = d*d * 3;
     }else if(pattern === 1){
       // rising diagonal ↗
       offsetY = -30 + i*6;
@@ -392,7 +377,7 @@ function spawnCarrotWave() {
     carrots.push({
       x: baseX + i*stepX,
       y: baseY + offsetY,
-      r: 9,
+      r: 14,
       golden: (i === goldenIndex)
     });
   }
@@ -475,7 +460,7 @@ function checkRankUp() {
   const nextRank = RANKS[nextRankIndex];
   if(obstaclesPassed >= nextRank.threshold){
     rankPopupTitle = nextRank.title;
-    rankPopupTimer = 150; // longer
+    rankPopupTimer = 150;
     nextRankIndex++;
   }
 }
@@ -502,8 +487,8 @@ function updateGame(){
     for(const c of carrots){
       if(c.x > maxCarrotX) maxCarrotX = c.x;
     }
-    // 0.7-ish spacing: allow spawn once carrots largely in left 70%
-    if(maxCarrotX > W*0.7){
+    // 0.5-ish spacing before next obstacle
+    if(maxCarrotX > W*0.5){
       canSpawnObstacle = false;
     }
   }
@@ -557,23 +542,16 @@ function updateGame(){
     return c.x > -30;
   });
 
-  // hop steam puffs update
+  // hop steam puffs update (small & subtle)
   hopPuffs.forEach(p=>{
-    p.y -= 0.8;
-    p.radius += 0.5;
-    p.alpha -= 0.025;
+    p.y -= 0.6;
+    p.radius += 0.3;
+    p.alpha -= 0.03;
   });
   hopPuffs = hopPuffs.filter(p=>p.alpha > 0);
 
   // background animation
   lanternPhase += 0.02;
-  steamWisps.forEach(w=>{
-    w.y -= w.speedY;
-    if(w.y < H - 150) {
-      w.y = H - 40 - Math.random()*40;
-      w.x = Math.random()*W;
-    }
-  });
 }
 
 // Draw
@@ -587,7 +565,7 @@ function draw(){
     shakeTimer--;
   }
 
-  // retro midnight sky
+  // retro midnight sky inside canvas
   const grad = ctx.createLinearGradient(0,0,0,H);
   grad.addColorStop(0, "#0a1633");
   grad.addColorStop(1, "#02040b");
@@ -642,132 +620,123 @@ function draw(){
   ctx.fillStyle = "#090f24";
   ctx.fill();
 
-  // snow caps as soft band
-  const snowGrad = ctx.createLinearGradient(0, H*0.38, 0, H*0.58);
-  snowGrad.addColorStop(0, "rgba(229,236,255,0.7)");
+  // snow caps band (very soft, not thick line)
+  const snowGrad = ctx.createLinearGradient(0, H*0.40, 0, H*0.58);
+  snowGrad.addColorStop(0, "rgba(229,236,255,0.6)");
   snowGrad.addColorStop(1, "rgba(229,236,255,0)");
   ctx.fillStyle = snowGrad;
-  ctx.fillRect(0, H*0.38, W, H*0.2);
+  ctx.fillRect(0, H*0.40, W, H*0.18);
   ctx.restore();
 
   // lantern runway BEHIND obstacles
   ctx.save();
   const lanternY = H*0.7;
-  for(let x = -20; x < W+40; x += 100){ // fewer lanterns
+  for(let x = -20; x < W+40; x += 100){
     const phase = lanternPhase + x*0.05;
     const glow = 0.7 + 0.3*Math.sin(phase);
     ctx.globalAlpha = 0.5 + 0.3*glow;
 
-    // lantern body (simple box shape)
+    // lantern body
     ctx.fillStyle = "#ffcf6b";
     ctx.fillRect(x-4, lanternY-7, 8, 12);
-    // top/bottom caps
+    // caps
     ctx.fillStyle = "#b8762a";
     ctx.fillRect(x-5, lanternY-8, 10, 2);
     ctx.fillRect(x-5, lanternY+4, 10, 2);
   }
   ctx.restore();
 
-  // bottom onsen steam blanket
+  // bottom onsen steam blanket (moved down)
   ctx.save();
-  const steamGrad = ctx.createLinearGradient(0, H*0.8, 0, H);
+  const steamGrad = ctx.createLinearGradient(0, H*0.9, 0, H);
   steamGrad.addColorStop(0, "rgba(255,255,255,0)");
-  steamGrad.addColorStop(1, "rgba(255,255,255,0.32)");
+  steamGrad.addColorStop(1, "rgba(255,255,255,0.4)");
   ctx.fillStyle = steamGrad;
-  ctx.fillRect(0, H*0.75, W, H*0.25);
+  ctx.fillRect(0, H*0.85, W, H*0.15);
   ctx.restore();
 
-  // drifting steam wisps (foreground environment steam, not circles)
-  ctx.save();
-  steamWisps.forEach(w=>{
-    ctx.globalAlpha = w.alpha;
-    ctx.fillStyle = "#f7f9ff";
-    ctx.beginPath();
-    ctx.ellipse(w.x, w.y, 32, 12, 0, 0, Math.PI*2);
-    ctx.fill();
-  });
-  ctx.restore();
-
-  // obstacles: dark brown wooden pillars with segments (W3)
+  // obstacles: dark muted bamboo (B2-ish)
   obstacles.forEach(o=>{
     const bottomHeight = H - (o.top + o.gap);
 
-    const woodColor = "#3a2615";
-    const woodHighlight = "#5c3a20";
+    const bambooMain = "#223726";
+    const bambooShadow = "#17251a";
+    const ringColor = "rgba(0,0,0,0.35)";
 
     ctx.save();
 
-    // top pillar
-    ctx.fillStyle = woodColor;
+    // top shaft
+    ctx.fillStyle = bambooMain;
     ctx.beginPath();
-    ctx.roundRect(o.x, 0, 40, o.top, 8);
+    ctx.roundRect(o.x, 0, 40, o.top, 10);
     ctx.fill();
 
-    // segment lines
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    // segment rings
+    ctx.strokeStyle = ringColor;
     ctx.lineWidth = 2;
-    for(let y=16; y<o.top; y+=18){
+    for(let y=20; y<o.top; y+=22){
       ctx.beginPath();
-      ctx.moveTo(o.x+4, y);
-      ctx.lineTo(o.x+36, y+2);
+      ctx.moveTo(o.x+5, y);
+      ctx.lineTo(o.x+35, y+1);
       ctx.stroke();
     }
-    // subtle vertical highlight
-    ctx.fillStyle = woodHighlight;
-    ctx.fillRect(o.x+10, 0, 4, o.top);
 
-    // bottom pillar
-    ctx.fillStyle = woodColor;
+    // subtle shadow stripe
+    ctx.fillStyle = bambooShadow;
+    ctx.fillRect(o.x+28, 0, 4, o.top);
+
+    // bottom shaft
+    ctx.fillStyle = bambooMain;
     ctx.beginPath();
-    ctx.roundRect(o.x, o.top+o.gap, 40, bottomHeight, 8);
+    ctx.roundRect(o.x, o.top+o.gap, 40, bottomHeight, 10);
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    for(let y=o.top+o.gap+16; y< H; y+=18){
+    ctx.strokeStyle = ringColor;
+    for(let y=o.top+o.gap+20; y<H; y+=22){
       ctx.beginPath();
-      ctx.moveTo(o.x+4, y);
-      ctx.lineTo(o.x+36, y+2);
+      ctx.moveTo(o.x+5, y);
+      ctx.lineTo(o.x+35, y+1);
       ctx.stroke();
     }
-    ctx.fillStyle = woodHighlight;
-    ctx.fillRect(o.x+10, o.top+o.gap, 4, bottomHeight);
+    ctx.fillStyle = bambooShadow;
+    ctx.fillRect(o.x+28, o.top+o.gap, 4, bottomHeight);
 
     ctx.restore();
   });
 
-  // carrots (triangles), golden vs normal
+  // carrots (bigger, inverted triangle body)
   carrots.forEach(c=>{
     ctx.save();
     ctx.translate(c.x, c.y);
 
-    // leaf
+    // leaf (small)
     ctx.fillStyle = "#70c96a";
     ctx.beginPath();
-    ctx.moveTo(0, -12);
-    ctx.lineTo(-4, -4);
-    ctx.lineTo(4, -4);
+    ctx.moveTo(0, -14);
+    ctx.lineTo(-4, -6);
+    ctx.lineTo(4, -6);
     ctx.closePath();
     ctx.fill();
 
-    // body
+    // body – single inverted triangle
     ctx.fillStyle = c.golden ? "#ffd94a" : "#ff9d3b";
     ctx.beginPath();
-    ctx.moveTo(0, -4);
-    ctx.lineTo(-5, 8);
-    ctx.lineTo(5, 8);
+    ctx.moveTo(0, -6);
+    ctx.lineTo(-7, 12);
+    ctx.lineTo(7, 12);
     ctx.closePath();
     ctx.fill();
 
     ctx.restore();
   });
 
-  // hop puffs (soft fog puffs under feet)
+  // hop puffs (small subtle steam)
   ctx.save();
   hopPuffs.forEach(p=>{
     ctx.globalAlpha = p.alpha;
     ctx.fillStyle = "#f5f7ff";
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y, p.radius*1.4, p.radius*0.7, 0, 0, Math.PI*2);
+    ctx.ellipse(p.x, p.y, p.radius*1.2, p.radius*0.6, 0, 0, Math.PI*2);
     ctx.fill();
   });
   ctx.restore();
