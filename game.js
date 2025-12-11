@@ -1,514 +1,735 @@
-/* =========================================
-   KOKKY'S HOT SPRING HOP — FULL GAME LOGIC
-   ========================================= */
-
-// Canvas
+// ===== CANVAS SETUP =====
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const W = canvas.width;
-const H = canvas.height;
 
-// DOM
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+
+// DOM elements
 const scoreSpan = document.getElementById("score");
 const bestSpan = document.getElementById("best");
 const playerIdLabel = document.getElementById("playerIdLabel");
 const changePlayerBtn = document.getElementById("changePlayerBtn");
 const overlay = document.getElementById("playerOverlay");
+const teamButtonsContainer = document.getElementById("teamButtons");
 const numberList = document.getElementById("numberList");
 const selectedPreview = document.getElementById("selectedPreview");
 const confirmPlayerBtn = document.getElementById("confirmPlayerBtn");
 
-// Images
-const kokkyImg = new Image();
-kokkyImg.src = "kokky.png";
+// ===== PLAYER ID / TEAMS =====
 
-const mountainImg = new Image();
-mountainImg.src = "mountains.png";
-
-const steamImg = new Image();
-steamImg.src = "steam.png";
-
-const woodImg = new Image();
-woodImg.src = "wood.png";
-
-// Game state
-let player = {
-  x: 130,
-  y: H / 2,
-  vy: 0,
-  w: 64,
-  h: 64
-};
-
-let gravity = 0.55;
-let jumpForce = -8.2;
-
-let obstacles = [];
-let gapSize = 170;  // vertical gap between top & bottom
-let obstacleSpeed = 2.8;
-let speedBoosted = false;
-
-let score = 0;
-let bestScore = parseInt(localStorage.getItem("bestScore") || "0", 10) || 0;
-bestSpan.textContent = "Best: " + bestScore;
-
-let isRunning = false;
-let isGameOver = false;
-
-// Background scroll
-let bgOffset = 0;
-let steamOffset = 0;
-
-// Stars + snow
-const stars = [];
-for (let i = 0; i < 80; i++) {
-  stars.push({
-    x: Math.random() * W,
-    y: Math.random() * (H * 0.6),
-    size: 1 + Math.random() * 2,
-    yellow: Math.random() < 0.7
-  });
-}
-
-const snowflakes = [];
-for (let i = 0; i < 70; i++) {
-  snowflakes.push({
-    x: Math.random() * W,
-    y: Math.random() * H,
-    r: 1 + Math.random() * 2.2,
-    vy: 0.35 + Math.random() * 0.7,
-    drift: (Math.random() - 0.5) * 0.4
-  });
-}
-
-// Player ID and team/number logic
-let currentPlayerId = localStorage.getItem("currentPlayerId") || null;
-
-// Master mapping from earlier list + A/B ALTs + Guest 0
+// Student-number mapping (your table)
 const TEAM_NUMBERS = {
-  W: ["5","8","9","18","19","22","28","29","30","34","A","B"],
-  R: ["1","4","6","7","11","13","20","21","27","31","40","A","B"],
-  G: ["10","12","14","23","24","26","35","36","37","39","A","B"],
-  B: ["2","3","15","16","17","25","32","33","38","41","A","B"],
-  Guest: ["0"]
+  W: [5, 8, 9, 18, 19, 22, 28, 29, 30, 34],
+  R: [1, 4, 6, 7, 11, 13, 20, 21, 27, 31, 40],
+  G: [10, 12, 14, 23, 24, 26, 35, 36, 37, 39],
+  B: [2, 3, 15, 16, 17, 25, 32, 33, 38, 41],
 };
 
-function updatePlayerLabel() {
-  playerIdLabel.textContent = currentPlayerId
-    ? "Player: " + currentPlayerId
-    : "Player: Not set";
-}
-updatePlayerLabel();
+// Rank thresholds & titles
+const RANK_THRESHOLDS = [0, 25, 50, 75, 100, 250, 500, 1000];
+const RANK_TITLES = [
+  "Onsen Rookie",
+  "Steam Hopper",
+  "Onsen Ace",
+  "Steam Master",
+  "Onsen Overlord",
+  "King of the Onsen",
+  "Onsen Legend",
+  "Onsen God",
+];
 
-// Open overlay when "Change" is pressed
-changePlayerBtn.addEventListener("click", () => {
+let currentTeam = null;
+let currentNumber = null;
+let currentPlayerId = null;
+
+// Load last used player
+(function loadCurrentPlayer() {
+  const saved = localStorage.getItem("kokkyCurrentPlayer");
+  if (saved) {
+    currentPlayerId = saved;
+    playerIdLabel.textContent = "Player: " + currentPlayerId;
+  }
+})();
+
+function showOverlay() {
   overlay.classList.remove("hidden");
-});
+}
+function hideOverlay() {
+  overlay.classList.add("hidden");
+}
 
-// Team buttons
-const teamButtons = document.querySelectorAll(".teamBtn");
-let selectedTeam = null;
-let selectedNumber = null;
+function teamName(code) {
+  switch (code) {
+    case "W":
+      return "White";
+    case "R":
+      return "Red";
+    case "G":
+      return "Green";
+    case "B":
+      return "Blue";
+    case "Guest":
+      return "Guest";
+    default:
+      return code;
+  }
+}
 
-teamButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    teamButtons.forEach(b => b.classList.remove("selected"));
-    btn.classList.add("selected");
-    selectedTeam = btn.dataset.team;
-    selectedNumber = null;
-    selectedPreview.textContent = "";
-    buildNumberList();
-  });
-});
+function setSelectedTeam(team) {
+  currentTeam = team;
+  currentNumber = null;
 
-function buildNumberList() {
+  document
+    .querySelectorAll(".teamBtn")
+    .forEach((btn) => btn.classList.remove("selected"));
+  const btn = document.querySelector(`.teamBtn[data-team="${team}"]`);
+  if (btn) btn.classList.add("selected");
+
+  populateNumberList(team);
+  updateSelectedPreview();
+}
+
+function populateNumberList(team) {
   numberList.innerHTML = "";
-  const nums = TEAM_NUMBERS[selectedTeam] || [];
+
+  if (team === "Guest") {
+    const btn = document.createElement("button");
+    btn.dataset.value = "0";
+    btn.textContent = "0 (Guest)";
+    btn.addEventListener("click", () => setSelectedNumber("0"));
+    numberList.appendChild(btn);
+    return;
+  }
+
+  const nums = TEAM_NUMBERS[team] || [];
+  if (nums.length === 0) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "No numbers configured for this team.";
+    numberList.appendChild(p);
+    return;
+  }
 
   nums.forEach((n) => {
-    const button = document.createElement("button");
-    // Show A/B as ALT label, but keep ID as letter
-    if (n === "A") button.textContent = "A (ALT)";
-    else if (n === "B") button.textContent = "B (ALT)";
-    else if (n === "0" && selectedTeam === "Guest") button.textContent = "0 (Guest)";
-    else button.textContent = n;
-
-    button.addEventListener("click", () => {
-      [...numberList.children].forEach(x => x.classList.remove("selected"));
-      button.classList.add("selected");
-      selectedNumber = n;
-      selectedPreview.textContent =
-        selectedTeam === "Guest"
-          ? "Selected: Guest-0"
-          : `Selected: ${selectedTeam}-${n}`;
-    });
-
-    numberList.appendChild(button);
+    const btn = document.createElement("button");
+    btn.dataset.value = String(n);
+    btn.textContent = n;
+    btn.addEventListener("click", () => setSelectedNumber(String(n)));
+    numberList.appendChild(btn);
   });
+
+  // ALTs A / B
+  ["A", "B"].forEach((code) => {
+    const btn = document.createElement("button");
+    btn.dataset.value = code;
+    btn.textContent = `${code} (ALT)`;
+    btn.addEventListener("click", () => setSelectedNumber(code));
+    numberList.appendChild(btn);
+  });
+}
+
+function setSelectedNumber(val) {
+  currentNumber = val;
+  numberList
+    .querySelectorAll("button")
+    .forEach((btn) => btn.classList.remove("selected"));
+  const btn = Array.from(numberList.querySelectorAll("button")).find(
+    (b) => b.dataset.value === val
+  );
+  if (btn) btn.classList.add("selected");
+  updateSelectedPreview();
+}
+
+function updateSelectedPreview() {
+  if (!currentTeam) {
+    selectedPreview.textContent = "No team selected.";
+    return;
+  }
+  if (currentTeam === "Guest") {
+    selectedPreview.textContent = "Selected: Guest";
+    return;
+  }
+  if (!currentNumber) {
+    selectedPreview.textContent = `Selected: ${teamName(currentTeam)} - ?`;
+    return;
+  }
+  selectedPreview.textContent = `Selected: ${teamName(
+    currentTeam
+  )} - ${currentNumber}`;
 }
 
 confirmPlayerBtn.addEventListener("click", () => {
-  if (!selectedTeam || !selectedNumber) return;
-  if (selectedTeam === "Guest") {
-    currentPlayerId = "Guest-0";
+  if (!currentTeam) return;
+
+  let id;
+  if (currentTeam === "Guest") {
+    id = "Guest";
+  } else if (!currentNumber) {
+    return;
   } else {
-    currentPlayerId = `${selectedTeam}-${selectedNumber}`;
+    id = `${currentTeam}-${currentNumber}`;
   }
-  localStorage.setItem("currentPlayerId", currentPlayerId);
-  updatePlayerLabel();
-  overlay.classList.add("hidden");
+
+  currentPlayerId = id;
+  localStorage.setItem("kokkyCurrentPlayer", id);
+  playerIdLabel.textContent = "Player: " + id;
+  hideOverlay();
+  resetGame();
 });
 
-// Ranks
-function getRankTitle(s) {
-  if (s >= 1000) return "Onsen God";
-  if (s >= 500) return "Onsen Legend";
-  if (s >= 250) return "King of the Onsen";
-  if (s >= 100) return "Onsen Overlord";
-  if (s >= 75) return "Steam Master";
-  if (s >= 50) return "Onsen Ace";
-  if (s >= 25) return "Steam Hopper";
-  return "-";
+teamButtonsContainer.addEventListener("click", (e) => {
+  if (e.target.classList.contains("teamBtn")) {
+    const team = e.target.dataset.team;
+    setSelectedTeam(team);
+  }
+});
+
+changePlayerBtn.addEventListener("click", () => {
+  showOverlay();
+});
+
+if (!currentPlayerId) {
+  showOverlay();
 }
 
-// Rank banner (gold slide-down)
-let rankBannerText = "";
-let rankBannerTimer = 0;
+// ===== IMAGES =====
 
-function triggerRankBanner(title) {
-  rankBannerText = title;
-  rankBannerTimer = 90; // frames ~1.5s at 60fps
-}
+// Kokky sprite
+const kokkyImg = new Image();
+kokkyImg.src = "kokky.png";
+let kokkyReady = false;
+kokkyImg.onload = () => {
+  kokkyReady = true;
+};
 
-function drawRankBanner() {
-  if (rankBannerTimer <= 0 || rankBannerText === "-") return;
-  rankBannerTimer--;
+// Wood / bamboo obstacles
+const woodImg = new Image();
+woodImg.src = "wood.png";
+let woodPattern = null;
+woodImg.onload = () => {
+  woodPattern = ctx.createPattern(woodImg, "repeat-y");
+};
 
-  const alpha = Math.min(1, rankBannerTimer / 20);
-  const bannerWidth = W * 0.8;
-  const bannerHeight = 60;
-  const x = (W - bannerWidth) / 2;
-  const y = 40;
+// Mountains band
+const mountainsImg = new Image();
+mountainsImg.src = "mountains.png";
+let mountainsReady = false;
+mountainsImg.onload = () => {
+  mountainsReady = true;
+};
 
-  ctx.save();
-  ctx.globalAlpha = alpha;
+// Steam band
+const steamImg = new Image();
+steamImg.src = "steam.png";
+let steamReady = false;
+steamImg.onload = () => {
+  steamReady = true;
+};
 
-  const grad = ctx.createLinearGradient(x, y, x + bannerWidth, y + bannerHeight);
-  grad.addColorStop(0, "#ffe08a");
-  grad.addColorStop(0.5, "#fffae1");
-  grad.addColorStop(1, "#f5c34d");
+// ===== BACKGROUND PARTICLES =====
+const stars = [];
+const SNOW_COUNT = 60;
+const snowflakes = [];
 
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.roundRect(x, y, bannerWidth, bannerHeight, 12);
-  ctx.fill();
-
-  ctx.strokeStyle = "#8a5a00";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.fillStyle = "#3a2200";
-  ctx.font = "24px Handjet";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("Rank Up: " + rankBannerText, W / 2, y + bannerHeight / 2);
-
-  ctx.restore();
-}
-
-// Scoreboard saving (per-player best)
-function saveScoreToBoard() {
-  if (!currentPlayerId) return;
-
-  let board = [];
-  try {
-    board = JSON.parse(localStorage.getItem("scoreboard") || "[]");
-  } catch {
-    board = [];
+function initBackgroundParticles() {
+  stars.length = 0;
+  for (let i = 0; i < 80; i++) {
+    stars.push({
+      x: Math.random() * WIDTH,
+      y: Math.random() * (HEIGHT * 0.55),
+      r: Math.random() * 1.3 + 0.7,
+      color: Math.random() < 0.3 ? "#ffe9a9" : "#f5f5ff",
+    });
   }
 
-  let entry = board.find(e => e.id === currentPlayerId);
-  const newRank = getRankTitle(score);
+  snowflakes.length = 0;
+  for (let i = 0; i < SNOW_COUNT; i++) {
+    snowflakes.push({
+      x: Math.random() * WIDTH,
+      y: Math.random() * HEIGHT,
+      r: Math.random() * 2 + 1,
+      speed: Math.random() * 0.6 + 0.3,
+    });
+  }
+}
 
-  if (!entry) {
-    board.push({ id: currentPlayerId, score: score, rank: newRank });
-  } else {
-    if (score > entry.score) {
-      entry.score = score;
-      entry.rank = newRank;
+initBackgroundParticles();
+
+// ===== GAME STATE =====
+const player = {
+  x: WIDTH * 0.2,
+  y: HEIGHT * 0.45,
+  vy: 0,
+  w: 60,
+  h: 60,
+};
+
+const GRAVITY = 0.35;
+const JUMP_VELOCITY = -6.6;
+
+let obstacles = [];
+const OBSTACLE_WIDTH = 80;
+const GAP_HEIGHT = 190;
+const OBSTACLE_SPACING = 260;
+
+let baseSpeed = 2.7;
+let speed = baseSpeed;
+let speedBoosted = false;
+
+let gameOver = false;
+let score = 0;
+let bestScoreForPlayer = 0;
+let framesSinceStart = 0;
+let lastRankIndex = 0;
+
+const rankBanner = {
+  visible: false,
+  text: "",
+  timer: 0,
+};
+
+function loadBestForPlayer() {
+  bestScoreForPlayer = 0;
+  if (!currentPlayerId) return;
+  const raw = localStorage.getItem("kokkyScores");
+  if (!raw) return;
+  try {
+    const data = JSON.parse(raw);
+    const entry = data.find((e) => e.playerId === currentPlayerId);
+    if (entry) bestScoreForPlayer = entry.highScore || 0;
+  } catch (e) {
+    console.error(e);
+  }
+  bestSpan.textContent = "Best: " + bestScoreForPlayer;
+}
+
+loadBestForPlayer();
+
+function randomGapY() {
+  const minY = HEIGHT * 0.25;
+  const maxY = HEIGHT * 0.65;
+  return minY + Math.random() * (maxY - minY);
+}
+
+function createInitialObstacles() {
+  obstacles = [];
+  const count = 4;
+  for (let i = 0; i < count; i++) {
+    const x = WIDTH + i * OBSTACLE_SPACING;
+    obstacles.push({ x, gapY: randomGapY(), counted: false });
+  }
+}
+
+function resetGame() {
+  player.y = HEIGHT * 0.45;
+  player.vy = 0;
+  score = 0;
+  scoreSpan.textContent = "Score: 0";
+  loadBestForPlayer();
+  gameOver = false;
+  framesSinceStart = 0;
+  speed = baseSpeed;
+  speedBoosted = false;
+  lastRankIndex = getRankIndex(0);
+  rankBanner.visible = false;
+  createInitialObstacles();
+}
+
+resetGame();
+
+// ===== INPUT =====
+function doJump() {
+  if (!currentPlayerId) {
+    showOverlay();
+    return;
+  }
+  if (gameOver) {
+    resetGame();
+    return;
+  }
+  player.vy = JUMP_VELOCITY;
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.code === "Space" || e.code === "ArrowUp") {
+    e.preventDefault();
+    doJump();
+  }
+});
+
+canvas.addEventListener("mousedown", () => doJump());
+canvas.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  doJump();
+});
+
+// ===== RANK HELPERS =====
+function getRankIndex(scoreVal) {
+  let idx = 0;
+  for (let i = 0; i < RANK_THRESHOLDS.length; i++) {
+    if (scoreVal >= RANK_THRESHOLDS[i]) idx = i;
+    else break;
+  }
+  return idx;
+}
+
+function maybeShowRankBanner(newScore) {
+  const idx = getRankIndex(newScore);
+  if (idx > lastRankIndex) {
+    lastRankIndex = idx;
+    if (idx > 0) {
+      rankBanner.visible = true;
+      rankBanner.text = RANK_TITLES[idx];
+      rankBanner.timer = 90; // ~1.5 seconds
+    }
+  }
+}
+
+function saveScore(finalScore) {
+  if (!currentPlayerId) return;
+  const rankIndex = getRankIndex(finalScore);
+
+  const raw = localStorage.getItem("kokkyScores");
+  let data = [];
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+      data = [];
     }
   }
 
-  localStorage.setItem("scoreboard", JSON.stringify(board));
+  let entry = data.find((e) => e.playerId === currentPlayerId);
+  if (!entry) {
+    entry = { playerId: currentPlayerId, highScore: finalScore, bestRank: rankIndex };
+    data.push(entry);
+  } else {
+    if (finalScore > entry.highScore) entry.highScore = finalScore;
+    if (rankIndex > (entry.bestRank || 0)) entry.bestRank = rankIndex;
+  }
+
+  localStorage.setItem("kokkyScores", JSON.stringify(data));
 }
 
-// Obstacles
-function spawnObstacle() {
-  const centerY = 230 + Math.random() * 240; // spread gaps
-  const topH = centerY - gapSize / 2;
-  const bottomY = centerY + gapSize / 2;
-  const bottomH = (H - 120) - bottomY; // above steam
+// ===== BACKGROUND DRAWING =====
 
-  obstacles.push({
-    x: W + 40,
-    w: 80,
-    top: topH,
-    bottomY: bottomY,
-    bottomH: bottomH,
-    passed: false
-  });
-}
-
-// Moon — STABLE crater moon (no images, just drawing)
 function drawMoon() {
-  const cx = W - 100;
-  const cy = 110;
-  const r = 40;
+  const cx = WIDTH * 0.78;
+  const cy = HEIGHT * 0.19;
+  const r = 48;
 
-  // Glow
-  ctx.save();
-  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2);
-  glow.addColorStop(0, "rgba(255, 240, 200, 0.9)");
-  glow.addColorStop(1, "rgba(255, 240, 200, 0)");
-  ctx.fillStyle = glow;
+  // glow
+  const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r * 1.4);
+  glowGrad.addColorStop(0, "rgba(255,241,198,0.65)");
+  glowGrad.addColorStop(1, "rgba(255,241,198,0.0)");
+  ctx.fillStyle = glowGrad;
   ctx.beginPath();
-  ctx.arc(cx, cy, r * 2, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r * 1.4, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
 
-  // Body
-  const body = ctx.createRadialGradient(cx - 10, cy - 10, 6, cx, cy, r);
-  body.addColorStop(0, "#fff3c8");
-  body.addColorStop(0.3, "#ffe2a3");
-  body.addColorStop(1, "#d9b467");
-  ctx.fillStyle = body;
+  // disk
+  const diskGrad = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.2, r * 0.15, cx, cy, r);
+  diskGrad.addColorStop(0, "#fff2cf");
+  diskGrad.addColorStop(1, "#e4cf98");
+  ctx.fillStyle = diskGrad;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // Craters (fixed, not random — no jitter)
+  // craters
   const craters = [
-    { x: -15, y: -5, size: 5 },
-    { x:  10, y: -12, size: 4 },
-    { x:  14, y:   4, size: 3 },
-    { x:  -4, y:  14, size: 4 }
+    { ox: -0.25, oy: -0.1, rr: 0.22 },
+    { ox: 0.15, oy: -0.05, rr: 0.19 },
+    { ox: -0.05, oy: 0.18, rr: 0.16 },
   ];
-
-  ctx.fillStyle = "rgba(180,150,70,0.28)";
-  craters.forEach(c => {
+  craters.forEach((c) => {
+    const cx2 = cx + c.ox * r;
+    const cy2 = cy + c.oy * r;
+    const rr = c.rr * r;
+    const g = ctx.createRadialGradient(cx2, cy2, rr * 0.2, cx2, cy2, rr);
+    g.addColorStop(0, "rgba(213,195,137,0.9)");
+    g.addColorStop(1, "rgba(170,150,104,0.1)");
+    ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(cx + c.x, cy + c.y, c.size, 0, Math.PI * 2);
+    ctx.arc(cx2, cy2, rr, 0, Math.PI * 2);
     ctx.fill();
   });
 }
 
-// Background drawing
 function drawBackground() {
-  // Night sky
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
-  skyGrad.addColorStop(0, "#050b23");
-  skyGrad.addColorStop(0.6, "#07122c");
-  skyGrad.addColorStop(1, "#050b23");
+  // night sky gradient
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, HEIGHT * 0.7);
+  skyGrad.addColorStop(0, "#05081a");
+  skyGrad.addColorStop(1, "#020514");
   ctx.fillStyle = skyGrad;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-  // Stars
-  stars.forEach(s => {
-    ctx.fillStyle = s.yellow ? "#ffe599" : "#f8f8ff";
-    ctx.fillRect(s.x, s.y, s.size, s.size);
-  });
-
-  // Snow
-  snowflakes.forEach(f => {
-    ctx.fillStyle = "rgba(240,240,255,0.9)";
+  // stars
+  stars.forEach((s) => {
     ctx.beginPath();
-    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = s.color;
     ctx.fill();
-
-    f.y += f.vy;
-    f.x += f.drift;
-    if (f.y > H) {
-      f.y = -10;
-      f.x = Math.random() * W;
-    }
-    if (f.x < -10) f.x = W + 10;
-    if (f.x > W + 10) f.x = -10;
   });
 
-  // Moon (static & behind obstacles)
+  // moon (behind obstacles)
   drawMoon();
 
-  // Mountains (scrolling)
-  ctx.drawImage(mountainImg, bgOffset, H - 220, W, 220);
-  ctx.drawImage(mountainImg, bgOffset + W, H - 220, W, 220);
-  bgOffset -= 0.4;
-  if (bgOffset <= -W) bgOffset = 0;
+  // mountains band
+  const mountainBandY = HEIGHT * 0.7;
+  const mountainH = HEIGHT * 0.22;
+  if (mountainsReady) {
+    ctx.drawImage(mountainsImg, 0, mountainBandY - mountainH, WIDTH, mountainH);
+  }
 
-  // Steam foreground
-  ctx.drawImage(steamImg, steamOffset, H - 120, W, 120);
-  ctx.drawImage(steamImg, steamOffset + W, H - 120, W, 120);
-  steamOffset -= 1.2;
-  if (steamOffset <= -W) steamOffset = 0;
-}
+  // subtle dark overlay behind mountains to blend sky
+  const blendGrad = ctx.createLinearGradient(0, mountainBandY - mountainH, 0, mountainBandY);
+  blendGrad.addColorStop(0, "rgba(0,0,0,0.15)");
+  blendGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = blendGrad;
+  ctx.fillRect(0, mountainBandY - mountainH, WIDTH, mountainH);
 
-// Obstacles drawing
-function drawObstacles() {
-  obstacles.forEach(o => {
-    // Top bamboo
-    ctx.drawImage(woodImg, o.x, 0, o.w, o.top);
+  // bottom steam band
+  const steamBandH = HEIGHT * 0.24;
+  if (steamReady) {
+    ctx.drawImage(steamImg, 0, HEIGHT - steamBandH, WIDTH, steamBandH);
+  } else {
+    const fgGrad = ctx.createLinearGradient(0, HEIGHT * 0.75, 0, HEIGHT);
+    fgGrad.addColorStop(0, "rgba(240,240,248,0.9)");
+    fgGrad.addColorStop(1, "rgba(210,210,230,1)");
+    ctx.fillStyle = fgGrad;
+    ctx.fillRect(0, HEIGHT * 0.75, WIDTH, HEIGHT * 0.25);
+  }
 
-    // Bottom bamboo
-    ctx.drawImage(woodImg, o.x, o.bottomY, o.w, o.bottomH);
+  // snowflakes (in front of sky/mountains, behind player)
+  snowflakes.forEach((s) => {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fill();
   });
 }
 
-// Player drawing
+// ===== DRAW OBSTACLES & PLAYER =====
+function drawObstacles() {
+  obstacles.forEach((ob) => {
+    const x = ob.x;
+    const gapY = ob.gapY;
+    const topHeight = gapY - GAP_HEIGHT / 2;
+    const bottomY = gapY + GAP_HEIGHT / 2;
+    const bottomHeight = HEIGHT - bottomY;
+
+    ctx.fillStyle = woodPattern || "#6b4a2f";
+
+    // top pillar
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, 0, OBSTACLE_WIDTH, topHeight);
+    ctx.clip();
+    ctx.fillRect(x, 0, OBSTACLE_WIDTH, topHeight);
+    ctx.restore();
+
+    // bottom pillar
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, bottomY, OBSTACLE_WIDTH, bottomHeight);
+    ctx.clip();
+    ctx.fillRect(x, bottomY, OBSTACLE_WIDTH, bottomHeight);
+    ctx.restore();
+  });
+}
+
 function drawPlayer() {
-  if (kokkyImg.complete && kokkyImg.naturalWidth > 0) {
-    ctx.drawImage(
-      kokkyImg,
-      player.x - player.w / 2,
-      player.y - player.h / 2,
-      player.w,
-      player.h
-    );
+  const drawX = player.x - player.w / 2;
+  const drawY = player.y - player.h / 2;
+
+  if (kokkyReady) {
+    ctx.drawImage(kokkyImg, drawX, drawY, player.w, player.h);
   } else {
-    ctx.fillStyle = "white";
-    ctx.fillRect(
-      player.x - player.w / 2,
-      player.y - player.h / 2,
-      player.w,
-      player.h
-    );
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.w / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // hop steam: flat puff under feet
+  if (player.vy < 0) {
+    const puffY = player.y + player.h * 0.35;
+    ctx.fillStyle = "rgba(220,220,230,0.8)";
+    ctx.beginPath();
+    ctx.ellipse(player.x - 18, puffY, 18, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
-// Input
-function tap() {
-  if (!currentPlayerId) {
-    overlay.classList.remove("hidden");
-    return;
+// ===== UPDATE LOOP =====
+function update(dt) {
+  framesSinceStart++;
+
+  // snow motion
+  snowflakes.forEach((s) => {
+    s.y += s.speed;
+    if (s.y > HEIGHT) {
+      s.y = -5;
+      s.x = Math.random() * WIDTH;
+    }
+  });
+
+  if (gameOver) return;
+
+  // physics
+  player.vy += GRAVITY;
+  player.y += player.vy;
+
+  if (player.y + player.h / 2 > HEIGHT) {
+    player.y = HEIGHT - player.h / 2;
+    endGame();
+  } else if (player.y - player.h / 2 < 0) {
+    player.y = player.h / 2;
+    player.vy = 0;
   }
 
-  if (!isRunning) {
-    startGame();
-  } else if (!isGameOver) {
-    player.vy = jumpForce;
+  // speed boost once at score >= 60
+  if (!speedBoosted && score >= 60) {
+    speed += 0.6;
+    speedBoosted = true;
   }
-}
 
-document.addEventListener("keydown", (e) => {
-  if (e.code === "Space") {
-    e.preventDefault();
-    tap();
+  // move obstacles
+  obstacles.forEach((ob) => {
+    ob.x -= speed;
+  });
+
+  // recycle
+  if (obstacles.length && obstacles[0].x + OBSTACLE_WIDTH < 0) {
+    obstacles.shift();
+    const lastX = obstacles[obstacles.length - 1].x;
+    obstacles.push({
+      x: lastX + OBSTACLE_SPACING,
+      gapY: randomGapY(),
+      counted: false,
+    });
   }
-});
 
-canvas.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  tap();
-});
+  // scoring & collisions
+  obstacles.forEach((ob) => {
+    if (!ob.counted && player.x > ob.x + OBSTACLE_WIDTH) {
+      ob.counted = true;
+      score++;
+      scoreSpan.textContent = "Score: " + score;
+      maybeShowRankBanner(score);
 
-// Game control
-function startGame() {
-  isRunning = true;
-  isGameOver = false;
-  score = 0;
-  scoreSpan.textContent = "Score: 0";
-  obstacles = [];
-  player.y = H / 2;
-  player.vy = 0;
-  obstacleSpeed = 2.8;
-  speedBoosted = false;
-  spawnObstacle();
+      if (score > bestScoreForPlayer) {
+        bestScoreForPlayer = score;
+        bestSpan.textContent = "Best: " + bestScoreForPlayer;
+      }
+    }
+
+    const withinX =
+      player.x + player.w / 3 > ob.x &&
+      player.x - player.w / 3 < ob.x + OBSTACLE_WIDTH;
+
+    if (withinX) {
+      const halfGap = GAP_HEIGHT / 2;
+      const topLimit = ob.gapY - halfGap;
+      const bottomLimit = ob.gapY + halfGap;
+
+      const playerTop = player.y - player.h / 2 + 8;
+      const playerBottom = player.y + player.h / 2 - 8;
+
+      if (playerTop < topLimit || playerBottom > bottomLimit) {
+        endGame();
+      }
+    }
+  });
+
+  if (rankBanner.visible) {
+    rankBanner.timer--;
+    if (rankBanner.timer <= 0) rankBanner.visible = false;
+  }
 }
 
 function endGame() {
-  if (isGameOver) return;
-  isGameOver = true;
-  isRunning = false;
-
-  if (score > bestScore) {
-    bestScore = score;
-    localStorage.setItem("bestScore", String(bestScore));
-  }
-  bestSpan.textContent = "Best: " + bestScore;
-
-  saveScoreToBoard();
+  if (gameOver) return;
+  gameOver = true;
+  saveScore(score);
 }
 
-// Main loop
-function update() {
-  // Physics
-  if (isRunning && !isGameOver) {
-    player.vy += gravity;
-    player.y += player.vy;
+// ===== UI DRAWING =====
+function drawRankBanner() {
+  if (!rankBanner.visible) return;
 
-    // floor (steam line)
-    const floorY = H - 120 - player.h / 2;
-    if (player.y > floorY) {
-      player.y = floorY;
-      endGame();
-    }
-    // ceiling
-    if (player.y < player.h / 2) {
-      player.y = player.h / 2;
-      player.vy = 0;
-    }
+  const bannerWidth = WIDTH * 0.7;
+  const bannerHeight = 50;
+  const x = (WIDTH - bannerWidth) / 2;
+  const y = HEIGHT * 0.1;
 
-    obstacles.forEach(o => {
-      o.x -= obstacleSpeed;
+  const grad = ctx.createLinearGradient(x, y, x + bannerWidth, y + bannerHeight);
+  grad.addColorStop(0, "#ffeb9a");
+  grad.addColorStop(1, "#ffc857");
 
-      // Score and speed bump
-      if (!o.passed && o.x + o.w < player.x) {
-        o.passed = true;
-        score++;
-        scoreSpan.textContent = "Score: " + score;
+  ctx.fillStyle = grad;
+  ctx.strokeStyle = "#b38828";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(x, y, bannerWidth, bannerHeight, 12);
+  ctx.fill();
+  ctx.stroke();
 
-        // Speed bump once at 60
-        if (!speedBoosted && score >= 60) {
-          speedBoosted = true;
-          obstacleSpeed += 0.7;
-        }
+  ctx.fillStyle = "#4b2b00";
+  ctx.font = "28px Handjet";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(rankBanner.text, WIDTH / 2, y + bannerHeight / 2);
+}
 
-        // Rank banner
-        const rank = getRankTitle(score);
-        if (rank !== "-" && rank !== rankBannerText) {
-          triggerRankBanner(rank);
-        }
-      }
-    });
+function drawGameOverMessage() {
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillRect(0, HEIGHT * 0.35, WIDTH, HEIGHT * 0.3);
 
-    // Remove offscreen obstacles, spawn new
-    if (obstacles.length && obstacles[0].x + obstacles[0].w < -50) {
-      obstacles.shift();
-      spawnObstacle();
-    }
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.font = "36px Handjet";
+  ctx.fillText("Game Over", WIDTH / 2, HEIGHT * 0.44);
 
-    // Collision with obstacles
-    const px = player.x;
-    const py = player.y;
-    const hw = player.w / 2;
-    const hh = player.h / 2;
+  ctx.font = "26px Handjet";
+  ctx.fillText("Tap or press Space to retry", WIDTH / 2, HEIGHT * 0.50);
+}
 
-    for (const o of obstacles) {
-      const inX = px + hw > o.x && px - hw < o.x + o.w;
-      if (inX) {
-        if (py - hh < o.top || py + hh > o.bottomY) {
-          endGame();
-          break;
-        }
-      }
-    }
-  }
+// roundRect polyfill
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+    if (w < 2 * r) r = w / 2;
+    if (h < 2 * r) r = h / 2;
+    this.beginPath();
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y, x + w, y + h, r);
+    this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r);
+    this.arcTo(x, y, x + w, y, r);
+    this.closePath();
+    return this;
+  };
+}
 
-  // Drawing
+// ===== MAIN LOOP =====
+let lastTime = 0;
+function loop(timestamp) {
+  const dt = (timestamp - lastTime) / 16.67;
+  lastTime = timestamp;
+
+  update(dt);
+
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
   drawBackground();
   drawObstacles();
   drawPlayer();
   drawRankBanner();
+  if (gameOver) drawGameOverMessage();
 
-  requestAnimationFrame(update);
+  requestAnimationFrame(loop);
 }
 
-update();
+requestAnimationFrame(loop);
