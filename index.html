@@ -1,54 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kokky's Hot Spring Hop</title>
 
-  <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Handjet:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Handjet:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
+
   <!-- TOP BAR -->
   <div id="topBar">
-    <a id="scoreboardLink" href="scoreboard.html">SCOREBOARD</a>
+    <a id="scoreboardLink" href="scoreboard.html">Scoreboard</a>
 
     <div id="playerBox">
-      <span id="playerIdLabel">Player: -</span>
+      <span id="playerIdLabel">Player: Not set</span>
       <button id="changePlayerBtn">Change</button>
     </div>
   </div>
 
   <!-- SCORE ROW -->
   <div id="scoreRow">
-    <span id="msg"></span>
-    <span id="scoreText">Score: 0 | Best: 0</span>
+    <span id="score">Score: 0</span> | 
+    <span id="best">Best: 0</span>
   </div>
 
-  <!-- GAME CANVAS -->
+  <!-- CANVAS -->
   <canvas id="game" width="480" height="720"></canvas>
 
-  <!-- PLAYER SELECT PANEL -->
-  <div id="playerSelect" class="overlay hidden">
+  <!-- PLAYER SELECT OVERLAY -->
+  <div id="playerOverlay" class="overlay hidden">
     <div id="playerPanel">
       <h2>Select Player</h2>
 
       <div class="section">
-        <div class="sectionTitle">Team</div>
-        <div id="teamButtons"></div>
+        <div class="sectionTitle">Choose Team</div>
+        <div id="teamButtons">
+          <button class="teamBtn" data-team="W">White</button>
+          <button class="teamBtn" data-team="R">Red</button>
+          <button class="teamBtn" data-team="G">Green</button>
+          <button class="teamBtn" data-team="B">Blue</button>
+          <button class="teamBtn" data-team="A">ALT A</button>
+          <button class="teamBtn" data-team="C">ALT B</button>
+        </div>
       </div>
 
       <div class="section">
-        <div class="sectionTitle">Number</div>
+        <div class="sectionTitle">Choose Number</div>
         <div id="numberList"></div>
       </div>
 
-      <p id="selectedPreview"></p>
+      <div id="selectedPreview"></div>
 
       <div class="panelButtons">
-        <button id="cancelPlayer">Cancel</button>
-        <button id="confirmPlayer">Confirm</button>
+        <button id="confirmPlayerBtn">Confirm</button>
       </div>
     </div>
   </div>
