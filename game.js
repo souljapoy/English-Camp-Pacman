@@ -1,149 +1,144 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-/* =========================
-   ASSETS
-========================= */
-
 const kokkyImg = new Image();
 kokkyImg.src = "kokky.png";
 
 const woodImg = new Image();
 woodImg.src = "wood.png";
 
-const mountainImg = new Image();
-mountainImg.src = "mountains.png";
+/* ---------- GAME CONSTANTS ---------- */
 
-const steamImg = new Image();
-steamImg.src = "steam.png";
+const GRAVITY = 0.55;
+const JUMP = -9;
+const PIPE_GAP = 165;
+const PIPE_WIDTH = 64;
+const PIPE_SPACING = 220;
+const PIPE_START_X = 360;
 
-/* =========================
-   GAME STATE
-========================= */
-
-let gameOver = false;
-let score = 0;
-let best = 0;
-let speed = 2.6;
-
-/* =========================
-   PLAYER
-========================= */
-
-const player = {
+/* Kokky = ORIGINAL SCALE */
+const kokky = {
   x: 120,
   y: canvas.height / 2,
   vy: 0,
-  gravity: 0.45,
-  jump: -7.5,
-  w: 36,
-  h: 36
+  w: 32,
+  h: 32
 };
 
-function resetGame() {
-  player.y = canvas.height / 2;
-  player.vy = 0;
-  score = 0;
-  pipes.length = 0;
-  spawnPipe();
-}
+/* ---------- STATE ---------- */
 
-/* =========================
-   INPUT
-========================= */
+let pipes = [];
+let score = 0;
+let best = Number(localStorage.getItem("bestScore")) || 0;
+let started = false;
+let playerSet = false;
 
-function handleInput() {
-  if (gameOver) {
-    gameOver = false;
-    resetGame();
-    return;
-  }
-  player.vy = player.jump;
-}
-
-window.addEventListener("keydown", e => {
-  if (e.code === "Space") handleInput();
-});
-canvas.addEventListener("mousedown", handleInput);
-canvas.addEventListener("touchstart", e => {
-  e.preventDefault();
-  handleInput();
-});
-
-/* =========================
-   OBSTACLES
-========================= */
-
-const pipes = [];
-const pipeGap = 170;
-const pipeWidth = 56;
-
-function spawnPipe() {
-  const center =
-    160 + Math.random() * (canvas.height - 320);
-
-  pipes.push({
-    x: canvas.width + 40,
-    top: center - pipeGap / 2,
-    bottom: center + pipeGap / 2,
-    scored: false
-  });
-}
-
-setInterval(() => {
-  if (!gameOver) spawnPipe();
-}, 1600);
-
-/* =========================
-   STARS + SNOW
-========================= */
+/* ---------- BACKGROUND ---------- */
 
 const stars = Array.from({ length: 120 }, () => ({
   x: Math.random() * canvas.width,
   y: Math.random() * canvas.height,
-  r: Math.random() * 1.6 + 0.4,
-  c: Math.random() < 0.7 ? "#ffe9a8" : "#ffffff"
+  r: Math.random() < 0.7 ? 1 : 2,
+  c: Math.random() < 0.7 ? "#ffe9a3" : "#ffffff"
 }));
 
-const snow = Array.from({ length: 90 }, () => ({
+const snow = Array.from({ length: 60 }, () => ({
   x: Math.random() * canvas.width,
   y: Math.random() * canvas.height,
-  r: Math.random() * 1.4 + 0.6,
-  v: Math.random() * 0.6 + 0.3
+  vy: 0.5 + Math.random()
 }));
 
-/* =========================
-   DRAW BACKGROUND
-========================= */
-
 function drawMoon() {
-  const mx = canvas.width - 90;
-  const my = 120;
-  const r = 42;
-
+  const x = 380, y = 120, r = 42;
   ctx.save();
+  ctx.shadowColor = "#f6e7b8";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = "#f2e3b0";
   ctx.beginPath();
-  ctx.arc(mx, my, r, 0, Math.PI * 2);
-  ctx.fillStyle = "#f1e3b0";
-  ctx.shadowColor = "#f1e3b0";
-  ctx.shadowBlur = 24;
+  ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.shadowBlur = 0;
-  ctx.fillStyle = "rgba(0,0,0,0.08)";
-  ctx.beginPath();
-  ctx.arc(mx - 10, my - 6, 6, 0, Math.PI * 2);
-  ctx.arc(mx + 6, my + 4, 9, 0, Math.PI * 2);
-  ctx.arc(mx + 2, my - 14, 4, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,.08)";
+  [[-10,-6,6],[8,4,4],[-2,10,5]].forEach(c=>{
+    ctx.beginPath();
+    ctx.arc(x+c[0], y+c[1], c[2], 0, Math.PI*2);
+    ctx.fill();
+  });
   ctx.restore();
 }
 
-function drawBackground() {
-  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  grad.addColorStop(0, "#0a1230");
-  grad.addColorStop(1, "#02040b");
-  ctx.fillStyle = grad;
+/* ---------- PIPES ---------- */
+
+function spawnPipe() {
+  const gapY = 120 + Math.random() * (canvas.height - 360);
+  pipes.push({
+    x: PIPE_START_X,
+    gapY
+  });
+}
+
+/* ---------- INPUT ---------- */
+
+function jump() {
+  if (!playerSet) {
+    document.getElementById("playerOverlay").classList.remove("hidden");
+    return;
+  }
+  started = true;
+  kokky.vy = JUMP;
+}
+
+canvas.addEventListener("click", jump);
+window.addEventListener("keydown", e => {
+  if (e.code === "Space") jump();
+});
+
+/* ---------- LOOP ---------- */
+
+function update() {
+  kokky.vy += GRAVITY;
+  kokky.y += kokky.vy;
+
+  pipes.forEach(p => p.x -= 2);
+
+  if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - PIPE_SPACING) {
+    spawnPipe();
+  }
+
+  pipes = pipes.filter(p => p.x + PIPE_WIDTH > 0);
+
+  pipes.forEach(p => {
+    if (!p.scored && p.x + PIPE_WIDTH < kokky.x) {
+      score++;
+      p.scored = true;
+      best = Math.max(best, score);
+      localStorage.setItem("bestScore", best);
+    }
+
+    if (
+      kokky.x + kokky.w > p.x &&
+      kokky.x < p.x + PIPE_WIDTH &&
+      (kokky.y < p.gapY - PIPE_GAP / 2 ||
+       kokky.y + kokky.h > p.gapY + PIPE_GAP / 2)
+    ) reset();
+  });
+
+  if (kokky.y < 0 || kokky.y + kokky.h > canvas.height) reset();
+}
+
+function reset() {
+  kokky.y = canvas.height / 2;
+  kokky.vy = 0;
+  pipes = [];
+  score = 0;
+  started = false;
+}
+
+/* ---------- DRAW ---------- */
+
+function draw() {
+  ctx.fillStyle = "#02040b";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   stars.forEach(s => {
@@ -153,141 +148,75 @@ function drawBackground() {
     ctx.fill();
   });
 
+  snow.forEach(f => {
+    f.y += f.vy;
+    if (f.y > canvas.height) f.y = 0;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(f.x, f.y, 1, 1);
+  });
+
   drawMoon();
 
-  snow.forEach(p => {
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fill();
-    p.y += p.v;
-    if (p.y > canvas.height) p.y = -5;
-  });
-
-  ctx.drawImage(
-    mountainImg,
-    0,
-    canvas.height - 260,
-    canvas.width,
-    120
-  );
-
-  ctx.drawImage(
-    steamImg,
-    0,
-    canvas.height - 140,
-    canvas.width,
-    140
-  );
-}
-
-/* =========================
-   DRAW PLAYER
-========================= */
-
-function drawPlayer() {
-  ctx.drawImage(
-    kokkyImg,
-    player.x,
-    player.y,
-    player.w,
-    player.h
-  );
-
-  ctx.globalAlpha = 0.35;
-  ctx.drawImage(
-    steamImg,
-    player.x - 8,
-    player.y + player.h - 4,
-    40,
-    14
-  );
-  ctx.globalAlpha = 1;
-}
-
-/* =========================
-   DRAW PIPES
-========================= */
-
-function drawPipes() {
   pipes.forEach(p => {
     ctx.drawImage(
       woodImg,
-      p.x,
-      0,
-      pipeWidth,
-      p.top
+      0, 0, woodImg.width, woodImg.height,
+      p.x, 0,
+      PIPE_WIDTH, p.gapY - PIPE_GAP / 2
     );
     ctx.drawImage(
       woodImg,
-      p.x,
-      p.bottom,
-      pipeWidth,
-      canvas.height - p.bottom
+      0, 0, woodImg.width, woodImg.height,
+      p.x, p.gapY + PIPE_GAP / 2,
+      PIPE_WIDTH, canvas.height
     );
   });
+
+  ctx.drawImage(kokkyImg, kokky.x, kokky.y);
+
+  document.getElementById("score").textContent = `Score: ${score}`;
+  document.getElementById("best").textContent = `Best: ${best}`;
 }
 
-/* =========================
-   COLLISION
-========================= */
-
-function hitPipe(p) {
-  const hitX =
-    player.x + 8 < p.x + pipeWidth &&
-    player.x + player.w - 8 > p.x;
-
-  const hitY =
-    player.y + 6 < p.top ||
-    player.y + player.h - 6 > p.bottom;
-
-  return hitX && hitY;
-}
-
-/* =========================
-   UPDATE
-========================= */
-
-function update() {
-  player.vy += player.gravity;
-  player.y += player.vy;
-
-  pipes.forEach(p => {
-    p.x -= speed;
-
-    if (!p.scored && p.x + pipeWidth < player.x) {
-      p.scored = true;
-      score++;
-      best = Math.max(best, score);
-      document.getElementById("score").textContent = `Score: ${score}`;
-      document.getElementById("best").textContent = `Best: ${best}`;
-    }
-
-    if (hitPipe(p)) gameOver = true;
-  });
-
-  if (player.y < -20 || player.y > canvas.height - 20) {
-    gameOver = true;
-  }
-
-  while (pipes.length && pipes[0].x < -pipeWidth) {
-    pipes.shift();
-  }
-}
-
-/* =========================
-   LOOP
-========================= */
+/* ---------- MAIN ---------- */
 
 function loop() {
-  drawBackground();
-  drawPipes();
-  drawPlayer();
-
-  if (!gameOver) update();
-
+  if (started) update();
+  draw();
   requestAnimationFrame(loop);
 }
 
-spawnPipe();
 loop();
+
+/* ---------- PLAYER UI ---------- */
+
+const overlay = document.getElementById("playerOverlay");
+document.getElementById("changePlayerBtn").onclick = () => overlay.classList.remove("hidden");
+
+document.querySelectorAll(".teamBtn").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".teamBtn").forEach(b=>b.classList.remove("selected"));
+    btn.classList.add("selected");
+    const list = document.getElementById("numberList");
+    list.innerHTML = "";
+    if (btn.dataset.team === "Guest") {
+      const b = document.createElement("button");
+      b.textContent = "0";
+      b.onclick = ()=>selectPlayer("Guest-0");
+      list.appendChild(b);
+    } else {
+      for (let i=1;i<=41;i++) {
+        const b=document.createElement("button");
+        b.textContent=i;
+        b.onclick=()=>selectPlayer(`${btn.dataset.team}-${i}`);
+        list.appendChild(b);
+      }
+    }
+  };
+});
+
+function selectPlayer(id){
+  playerSet=true;
+  document.getElementById("playerIdLabel").textContent=`Player: ${id}`;
+  overlay.classList.add("hidden");
+}
