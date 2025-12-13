@@ -438,24 +438,27 @@ function drawMoon() {
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // craters
-  const craters = [
-    { ox: -0.25, oy: -0.1, rr: 0.22 },
-    { ox: 0.15, oy: -0.05, rr: 0.19 },
-    { ox: -0.05, oy: 0.18, rr: 0.16 },
-  ];
-  craters.forEach((c) => {
-    const cx2 = cx + c.ox * r;
-    const cy2 = cy + c.oy * r;
-    const rr = c.rr * r;
-    const g = ctx.createRadialGradient(cx2, cy2, rr * 0.2, cx2, cy2, rr);
-    g.addColorStop(0, "rgba(213,195,137,0.9)");
-    g.addColorStop(1, "rgba(170,150,104,0.1)");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx2, cy2, rr, 0, Math.PI * 2);
-    ctx.fill();
-  });
+// ---- ORIGINAL CRATER STYLE YOU APPROVED ----
+const craterList = [
+  { x: -0.28, y: -0.05, r: 0.22 },
+  { x: 0.18, y: -0.02, r: 0.18 },
+  { x: -0.05, y: 0.22, r: 0.15 }
+];
+
+craterList.forEach(c => {
+  const cx2 = cx + c.x * r;
+  const cy2 = cy + c.y * r;
+  const rr = c.r * r;
+
+  const g = ctx.createRadialGradient(cx2, cy2, rr * 0.1, cx2, cy2, rr);
+  g.addColorStop(0, "rgba(210,185,130,0.9)");
+  g.addColorStop(1, "rgba(140,120,90,0.25)");
+
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx2, cy2, rr, 0, Math.PI * 2);
+  ctx.fill();
+});
 }
 
 function drawBackground() {
