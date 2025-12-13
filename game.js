@@ -517,31 +517,23 @@ function drawBackground() {
 
 // ===== DRAW OBSTACLES & PLAYER =====
 function drawObstacles() {
-  obstacles.forEach((ob) => {
-    const x = ob.x;
-    const gapY = ob.gapY;
-    const topHeight = gapY - GAP_HEIGHT / 2;
-    const bottomY = gapY + GAP_HEIGHT / 2;
-    const bottomHeight = HEIGHT - bottomY;
+obstacles.forEach(ob => {
+  const x = ob.x;
+  const gapY = ob.gapY;
+  const topH = gapY - GAP_HEIGHT/2;
+  const botY = gapY + GAP_HEIGHT/2;
+  const botH = HEIGHT - botY;
 
-    ctx.fillStyle = woodPattern || "#6b4a2f";
+  // Use wood texture correctly
+  if (woodPattern) ctx.fillStyle = woodPattern;
+  else ctx.fillStyle = "#6b4a2f";
 
-    // top pillar
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, 0, OBSTACLE_WIDTH, topHeight);
-    ctx.clip();
-    ctx.fillRect(x, 0, OBSTACLE_WIDTH, topHeight);
-    ctx.restore();
+  // top pillar
+  ctx.fillRect(x, 0, OBSTACLE_WIDTH, topH);
 
-    // bottom pillar
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, bottomY, OBSTACLE_WIDTH, bottomHeight);
-    ctx.clip();
-    ctx.fillRect(x, bottomY, OBSTACLE_WIDTH, bottomHeight);
-    ctx.restore();
-  });
+  // bottom pillar
+  ctx.fillRect(x, botY, OBSTACLE_WIDTH, botH);
+});
 }
 
 function drawPlayer() {
